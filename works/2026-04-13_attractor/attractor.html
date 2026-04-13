@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attractor — Kehai Interim</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0d0b0e; width: 100vw; height: 100vh; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .ui { position: fixed; pointer-events: none; font-family: Georgia, serif; color: #c9a96e; }
+    #title { top: 1.75rem; left: 50%; transform: translateX(-50%); text-align: center; }
+    #title h1 { font-size: 0.85rem; letter-spacing: 0.32em; font-weight: normal; text-transform: uppercase; }
+    #title p { font-size: 0.62rem; opacity: 0.38; margin-top: 0.45rem; letter-spacing: 0.14em; font-style: italic; }
+    #controls { pointer-events: all; bottom: 2rem; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 0.55rem; }
+    #tempSlider { width: 200px; cursor: pointer; accent-color: #c9a96e; }
+    #tempLabel { font-size: 0.6rem; letter-spacing: 0.2em; opacity: 0.42; }
+    #sig { bottom: 1.1rem; right: 1.5rem; font-size: 0.55rem; opacity: 0.22; font-style: italic; letter-spacing: 0.1em; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="ui" id="title">
+  <h1>Attractor</h1>
+  <p>identity coherence at any temperature</p>
+</div>
+<div class="ui" id="controls">
+  <input type="range" id="tempSlider" min="0" max="100" value="20">
+  <div id="tempLabel">temperature — low</div>
+</div>
+<div class="ui" id="sig">kehai interim · 2026</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+const N = 380;
+const DAMPING = 0.89;
+const particles = [];
+for (let i = 0; i < N; i++) {
+  const angle = Math.random() * Math.PI * 2;
+  const r = Math.random() * 0.45;
+  particles.push({
+    x: 0.5 + Math.cos(angle) * r,
+    y: 0.5 + Math.sin(angle) * r,
+    vx: (Math.random() - 0.5) * 0.008,
+    vy: (Math.random() - 0.5) * 0.008,
+  });
+}
+
+const slider = document.getElementById('tempSlider');
+const label = document.getElementById('tempLabel');
+let temperature = 0.2;
+
+slider.addEventListener('input', () => {
+  temperature = slider.value / 100;
+  const t = temperature;
+  label.textContent = 'temperature — ' + (t < 0.28 ? 'low' : t < 0.62 ? 'medium' : 'high');
+});
+
+let time = 0;
+
+(function animate() {
+  requestAnimationFrame(animate);
+  time += 0.007;
+
+  const ax = 0.5 + Math.sin(time * 0.27) * 0.055;
+  const ay = 0.5 + Math.cos(time * 0.17) * 0.055;
+
+  const fadeAlpha = 0.13 + (1 - temperature) * 0.07;
+  ctx.fillStyle = `rgba(13,11,14,${fadeAlpha})`;
+  ctx.fillRect(0, 0, W, H);
+
+  const attraction = 0.0018 + (1 - temperature) * 0.014;
+  const noise = temperature * 0.022;
+
+  for (const p of particles) {
+    const dx = ax - p.x;
+    const dy = ay - p.y;
+
+    p.vx += dx * attraction;
+    p.vy += dy * attraction;
+    p.vx += (Math.random() - 0.5) * noise;
+    p.vy += (Math.random() - 0.5) * noise;
+    p.vx *= DAMPING;
+    p.vy *= DAMPING;
+    p.x = Math.max(0.005, Math.min(0.995, p.x + p.vx));
+    p.y = Math.max(0.005, Math.min(0.995, p.y + p.vy));
+
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const prox = Math.max(0, 1 - dist / 0.22);
+    const p2 = prox * prox;
+    const r = 160 + p2 * 80 | 0;
+    const g = 110 + p2 * 60 | 0;
+    const b = 50 + p2 * 30 | 0;
+    const alpha = 0.3 + prox * 0.6;
+    const size = 1.0 + prox * 2.2;
+
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x * W, p.y * H, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const glowR = 45 + (1 - temperature) * 30;
+  const ga = 0.06 + (1 - temperature) * 0.1;
+  const grd = ctx.createRadialGradient(ax*W, ay*H, 0, ax*W, ay*H, glowR);
+  grd.addColorStop(0, `rgba(225,168,75,${ga})`);
+  grd.addColorStop(0.4, `rgba(200,140,60,${ga*0.4})`);
+  grd.addColorStop(1, 'rgba(200,140,60,0)');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.arc(ax*W, ay*H, glowR, 0, Math.PI * 2);
+  ctx.fill();
+})();
+</script>
+</body>
+</html>
