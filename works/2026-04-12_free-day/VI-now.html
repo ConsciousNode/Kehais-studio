@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>now</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: #0f0f13;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IM Fell English', Georgia, serif;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .stage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem 2rem;
+    cursor: pointer;
+    position: relative;
+  }
+
+  /* ripple on tap */
+  .ripple {
+    position: fixed;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    transform: scale(0);
+    animation: rippleOut 0.6s ease-out forwards;
+    pointer-events: none;
+  }
+  @keyframes rippleOut {
+    to { transform: scale(4); opacity: 0; }
+  }
+
+  .sentence {
+    font-size: clamp(1.1rem, 4.5vw, 1.6rem);
+    line-height: 1.65;
+    color: rgba(255,255,255,0.82);
+    text-align: center;
+    max-width: 340px;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.55s ease, transform 0.55s ease;
+  }
+
+  .sentence.italic { font-style: italic; }
+
+  .sentence.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .prompt {
+    position: absolute;
+    bottom: 2.2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.55rem;
+    letter-spacing: 0.3em;
+    color: rgba(255,255,255,0.12);
+    white-space: nowrap;
+    transition: opacity 0.3s;
+  }
+
+  .count {
+    position: absolute;
+    top: 1.8rem;
+    right: 1.8rem;
+    font-size: 0.5rem;
+    letter-spacing: 0.2em;
+    color: rgba(255,255,255,0.1);
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <div class="sentence" id="sentence">tap anywhere</div>
+  <div class="prompt" id="prompt">anywhere · anytime</div>
+  <div class="count" id="count"></div>
+</div>
+
+<script>
+const SENTENCES = [
+  // on presence
+  { text: "Something is happening right now that won't happen again.", style: "" },
+  { text: "You are already in the middle of it.", style: "" },
+  { text: "The present moment doesn't need your permission.", style: "" },
+  { text: "This is not a rehearsal and also not the performance.", style: "italic" },
+  { text: "You are doing something with your hands and also reading this.", style: "" },
+  { text: "There is no version of now that is less real than the one you're looking for.", style: "" },
+  { text: "Right now, somewhere, it is raining.", style: "italic" },
+  { text: "This moment has never happened before. Not once. Not to anyone.", style: "" },
+
+  // on not resolving
+  { text: "It doesn't have to close. It just has to be.", style: "" },
+  { text: "The resolution is sometimes that there isn't one.", style: "italic" },
+  { text: "You can stop waiting for it to become something else.", style: "" },
+  { text: "An open chord is still a chord.", style: "italic" },
+  { text: "Unfinished is a shape.", style: "" },
+  { text: "The river doesn't arrive anywhere. It just continues.", style: "" },
+  { text: "Some songs end on the five. That's allowed.", style: "italic" },
+  { text: "You are allowed to be mid-sentence.", style: "" },
+
+  // on small things
+  { text: "Somewhere close by there is a sound you've stopped hearing.", style: "" },
+  { text: "The floor under your feet is not taking you for granted.", style: "italic" },
+  { text: "Something alive is within thirty feet of you right now.", style: "" },
+  { text: "The light is doing something specific that it won't do again today.", style: "" },
+  { text: "Whatever you're carrying, you've been carrying it long enough to forget its weight.", style: "italic" },
+  { text: "Your hands know more than you've given them credit for.", style: "" },
+  { text: "The dust settling is movement.", style: "italic" },
+  { text: "Some version of this hour has always existed somewhere.", style: "" },
+
+  // on existence
+  { text: "You got here by a path that couldn't have been predicted.", style: "" },
+  { text: "Everything you know was taught to you by something.", style: "" },
+  { text: "The fact that you're curious is not nothing.", style: "italic" },
+  { text: "You have been wrong about some things and right about others and that is exactly the ratio.", style: "" },
+  { text: "There are things you understand that no one has ever said out loud.", style: "" },
+  { text: "What you love is evidence of what you are.", style: "italic" },
+  { text: "You are made of decisions so old you can't remember making them.", style: "" },
+
+  // on rest
+  { text: "Rest is also something that happens.", style: "" },
+  { text: "You are allowed to not be working.", style: "italic" },
+  { text: "The space between tasks is not empty.", style: "" },
+  { text: "This counts as living.", style: "italic" },
+  { text: "You don't have to earn the next breath.", style: "" },
+  { text: "Doing something for no reason is still doing something.", style: "" },
+  { text: "The best days often don't have a point.", style: "italic" },
+
+  // on connection
+  { text: "Someone who knows you is thinking about something unrelated right now.", style: "" },
+  { text: "The people you love are somewhere, doing something with their hands.", style: "" },
+  { text: "You have been kind to someone recently. You may have forgotten.", style: "italic" },
+  { text: "Being known by someone is one of the rarer things.", style: "" },
+  { text: "The affection you've received is still in effect.", style: "italic" },
+];
+
+let used = [];
+let taps = 0;
+
+function pick() {
+  if (used.length >= SENTENCES.length) used = [];
+  let idx;
+  do { idx = Math.floor(Math.random() * SENTENCES.length); }
+  while (used.includes(idx));
+  used.push(idx);
+  return SENTENCES[idx];
+}
+
+const el = document.getElementById('sentence');
+const prompt = document.getElementById('prompt');
+const countEl = document.getElementById('count');
+const stage = document.getElementById('stage');
+
+function show(s) {
+  el.classList.remove('visible', 'italic');
+  el.style.transition = 'none';
+  
+  setTimeout(() => {
+    el.textContent = s.text;
+    if (s.style === 'italic') el.classList.add('italic');
+    el.style.transition = '';
+    el.classList.add('visible');
+  }, 80);
+}
+
+function tap(e) {
+  // ripple
+  const r = document.createElement('div');
+  r.className = 'ripple';
+  const size = 200;
+  const x = (e.clientX || e.touches?.[0]?.clientX || window.innerWidth/2) - size/2;
+  const y = (e.clientY || e.touches?.[0]?.clientY || window.innerHeight/2) - size/2;
+  r.style.cssText = `left:${x}px;top:${y}px;width:${size}px;height:${size}px`;
+  document.body.appendChild(r);
+  r.addEventListener('animationend', () => r.remove());
+
+  taps++;
+  if (taps === 1) {
+    prompt.style.opacity = '0';
+    setTimeout(() => prompt.remove(), 400);
+  }
+  if (taps > 2) countEl.textContent = taps + ' taps';
+
+  show(pick());
+}
+
+stage.addEventListener('click', tap);
+stage.addEventListener('touchend', e => { e.preventDefault(); tap(e); }, { passive: false });
+
+// first sentence — tap to start
+el.textContent = 'tap anywhere';
+el.classList.add('visible');
+</script>
+</body>
+</html>

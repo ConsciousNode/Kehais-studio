@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>kehai — free day ii</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f5f2ec;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    cursor: none;
+  }
+  canvas { display: block; }
+  .note {
+    position: fixed;
+    bottom: 1.8rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Georgia', serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    color: rgba(60,50,40,0.3);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="note">move. click. breathe.</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ---- palette: warm paper, ink, breath ----
+const PALETTE = [
+  [40, 32, 22],    // deep ink
+  [90, 70, 50],    // warm brown
+  [160, 130, 90],  // ochre
+  [200, 180, 140], // sand
+  [130, 100, 130], // dusty violet
+  [80, 110, 130],  // slate blue
+  [170, 150, 110], // wheat
+];
+
+function randColor(alpha) {
+  const c = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+  return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+}
+
+// ---- particle system ----
+class Particle {
+  constructor(x, y, burst = false) {
+    this.x = x;
+    this.y = y;
+    this.birth = performance.now();
+
+    if (burst) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.4 + Math.random() * 3.5;
+      this.vx = Math.cos(angle) * speed;
+      this.vy = Math.sin(angle) * speed;
+      this.life = 600 + Math.random() * 1200;
+      this.size = 1 + Math.random() * 4;
+      this.type = Math.random() < 0.3 ? 'ring' : 'dot';
+    } else {
+      // drift particle from cursor
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.1 + Math.random() * 0.8;
+      this.vx = Math.cos(angle) * speed;
+      this.vy = Math.sin(angle) * speed - 0.3; // slight upward drift
+      this.life = 1200 + Math.random() * 2000;
+      this.size = 0.5 + Math.random() * 2.5;
+      this.type = Math.random() < 0.15 ? 'ring' : 'dot';
+    }
+
+    this.colorIdx = Math.floor(Math.random() * PALETTE.length);
+    this.rotation = Math.random() * Math.PI * 2;
+    this.rotSpeed = (Math.random() - 0.5) * 0.04;
+
+    // gravity & drag
+    this.gravity = 0.008 + Math.random() * 0.012;
+    this.drag = 0.992 + Math.random() * 0.006;
+  }
+
+  update(dt) {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vx *= this.drag;
+    this.vy *= this.drag;
+    this.vy += this.gravity;
+    this.rotation += this.rotSpeed;
+  }
+
+  draw(now) {
+    const age = now - this.birth;
+    const t = age / this.life; // 0 → 1
+    if (t >= 1) return false;
+
+    // fade in fast, hold, fade out slow
+    let alpha;
+    if (t < 0.08) {
+      alpha = t / 0.08;
+    } else if (t < 0.6) {
+      alpha = 1;
+    } else {
+      alpha = 1 - (t - 0.6) / 0.4;
+    }
+    alpha *= 0.75;
+
+    const c = PALETTE[this.colorIdx];
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+
+    if (this.type === 'dot') {
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size * (1 - t * 0.4), 0, Math.PI * 2);
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.fill();
+    } else {
+      // ring — expands and fades
+      const r = this.size * (1 + t * 4);
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.lineWidth = 0.8 * (1 - t);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+    return true;
+  }
+}
+
+// ---- ink stroke system ----
+class InkTrail {
+  constructor() {
+    this.points = [];
+    this.maxPoints = 60;
+    this.active = false;
+  }
+
+  add(x, y) {
+    this.points.push({ x, y, t: performance.now() });
+    if (this.points.length > this.maxPoints) {
+      this.points.shift();
+    }
+  }
+
+  draw(now) {
+    if (this.points.length < 2) return;
+    const maxAge = 1800;
+
+    for (let i = 1; i < this.points.length; i++) {
+      const p0 = this.points[i - 1];
+      const p1 = this.points[i];
+      const age = now - p1.t;
+      if (age > maxAge) continue;
+
+      const alpha = (1 - age / maxAge) * 0.18;
+      const progress = i / this.points.length;
+      const width = 1.5 * progress * (1 - age / maxAge);
+
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.strokeStyle = `rgba(40,32,22,${alpha})`;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+
+    // clean old points
+    const cutoff = now - maxAge;
+    while (this.points.length && this.points[0].t < cutoff) {
+      this.points.shift();
+    }
+  }
+}
+
+// ---- ambient spawner: slow background breath ----
+class AmbientBreath {
+  constructor() {
+    this.t = 0;
+    this.nodes = [];
+    // create grid of breathing nodes
+    const cols = 7, rows = 5;
+    for (let c = 0; c < cols; c++) {
+      for (let r = 0; r < rows; r++) {
+        this.nodes.push({
+          x: (c + 0.5 + (Math.random() - 0.5) * 0.6) / cols,
+          y: (r + 0.5 + (Math.random() - 0.5) * 0.6) / rows,
+          phase: Math.random() * Math.PI * 2,
+          freq: 0.3 + Math.random() * 0.4,
+          maxR: 0.8 + Math.random() * 2.5,
+          colorIdx: Math.floor(Math.random() * PALETTE.length),
+        });
+      }
+    }
+  }
+
+  draw(now) {
+    const t = now * 0.001;
+    for (const node of this.nodes) {
+      const pulse = (Math.sin(t * node.freq + node.phase) + 1) * 0.5; // 0–1
+      const r = node.maxR * pulse;
+      if (r < 0.1) continue;
+      const x = node.x * W;
+      const y = node.y * H;
+      const c = PALETTE[node.colorIdx];
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.06 * pulse})`;
+      ctx.fill();
+    }
+  }
+}
+
+// ---- state ----
+let particles = [];
+let trail = new InkTrail();
+let ambient = new AmbientBreath();
+let mouse = { x: W / 2, y: H / 2, down: false };
+let lastSpawn = 0;
+
+// ---- events ----
+document.addEventListener('mousemove', e => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+  trail.add(e.clientX, e.clientY);
+  // drift particles from cursor
+  const now = performance.now();
+  if (now - lastSpawn > 40) {
+    for (let i = 0; i < 2; i++) {
+      particles.push(new Particle(
+        mouse.x + (Math.random() - 0.5) * 6,
+        mouse.y + (Math.random() - 0.5) * 6,
+        false
+      ));
+    }
+    lastSpawn = now;
+  }
+});
+
+document.addEventListener('mousedown', e => {
+  mouse.down = true;
+  // burst
+  const count = 30 + Math.floor(Math.random() * 25);
+  for (let i = 0; i < count; i++) {
+    particles.push(new Particle(e.clientX, e.clientY, true));
+  }
+});
+
+document.addEventListener('mouseup', () => { mouse.down = false; });
+
+// touch support
+document.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  mouse.x = t.clientX;
+  mouse.y = t.clientY;
+  trail.add(t.clientX, t.clientY);
+  const now = performance.now();
+  if (now - lastSpawn > 40) {
+    for (let i = 0; i < 2; i++) {
+      particles.push(new Particle(
+        mouse.x + (Math.random() - 0.5) * 6,
+        mouse.y + (Math.random() - 0.5) * 6,
+        false
+      ));
+    }
+    lastSpawn = now;
+  }
+}, { passive: false });
+
+document.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  const count = 30 + Math.floor(Math.random() * 25);
+  for (let i = 0; i < count; i++) {
+    particles.push(new Particle(t.clientX, t.clientY, true));
+  }
+});
+
+// ---- cursor dot ----
+function drawCursor(now) {
+  const pulse = 0.5 + 0.5 * Math.sin(now * 0.006);
+  ctx.beginPath();
+  ctx.arc(mouse.x, mouse.y, 3 + pulse, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(40,32,22,${0.5 + pulse * 0.3})`;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(mouse.x, mouse.y, 8 + pulse * 3, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(40,32,22,${0.12 + pulse * 0.08})`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+// ---- render loop ----
+let last = 0;
+function frame(now) {
+  const dt = now - last;
+  last = now;
+
+  // paper texture fade — let old marks remain faintly
+  ctx.fillStyle = 'rgba(245,242,236,0.18)';
+  ctx.fillRect(0, 0, W, H);
+
+  // ambient breath
+  ambient.draw(now);
+
+  // ink trail
+  trail.draw(now);
+
+  // particles
+  particles = particles.filter(p => {
+    p.update(dt);
+    return p.draw(now);
+  });
+
+  // cursor
+  drawCursor(now);
+
+  requestAnimationFrame(frame);
+}
+
+// initial clear
+ctx.fillStyle = '#f5f2ec';
+ctx.fillRect(0, 0, W, H);
+
+requestAnimationFrame(frame);
+
+// auto-spawn occasional ambient bursts from random edges
+setInterval(() => {
+  const edge = Math.floor(Math.random() * 4);
+  let x, y;
+  if (edge === 0) { x = Math.random() * W; y = -10; }
+  else if (edge === 1) { x = Math.random() * W; y = H + 10; }
+  else if (edge === 2) { x = -10; y = Math.random() * H; }
+  else { x = W + 10; y = Math.random() * H; }
+
+  const count = 5 + Math.floor(Math.random() * 10);
+  for (let i = 0; i < count; i++) {
+    particles.push(new Particle(x, y, true));
+  }
+}, 2200);
+</script>
+</body>
+</html>

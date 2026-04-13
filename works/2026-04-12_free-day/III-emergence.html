@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>kehai — free day iii</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0c0c0e;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Georgia', serif;
+    cursor: crosshair;
+  }
+  canvas { display: block; image-rendering: pixelated; }
+  
+  #ui {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  .preset {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.5);
+    font-family: 'Georgia', serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    padding: 0.35rem 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .preset:hover, .preset.active {
+    border-color: rgba(255,255,255,0.6);
+    color: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.05);
+  }
+  #label {
+    position: fixed;
+    top: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.6rem;
+    letter-spacing: 0.3em;
+    color: rgba(255,255,255,0.15);
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">gray-scott reaction-diffusion — click to seed</div>
+
+<div id="ui">
+  <button class="preset active" data-preset="coral">coral</button>
+  <button class="preset" data-preset="maze">maze</button>
+  <button class="preset" data-preset="spots">spots</button>
+  <button class="preset" data-preset="worms">worms</button>
+  <button class="preset" data-preset="mitosis">mitosis</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// Resolution — smaller = faster, still beautiful
+const SCALE = 3;
+let W, H, RW, RH;
+
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  RW = Math.floor(W / SCALE);
+  RH = Math.floor(H / SCALE);
+  canvas.width = W;
+  canvas.height = H;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  init();
+}
+
+// Gray-Scott parameters
+const PRESETS = {
+  coral:   { f: 0.0545, k: 0.062,  dA: 1.0, dB: 0.5, name: 'coral',   palette: 'warm' },
+  maze:    { f: 0.029,  k: 0.057,  dA: 1.0, dB: 0.5, name: 'maze',    palette: 'cool' },
+  spots:   { f: 0.025,  k: 0.06,   dA: 1.0, dB: 0.5, name: 'spots',   palette: 'ochre' },
+  worms:   { f: 0.078,  k: 0.061,  dA: 1.0, dB: 0.5, name: 'worms',   palette: 'dark' },
+  mitosis: { f: 0.0367, k: 0.0649, dA: 1.0, dB: 0.5, name: 'mitosis', palette: 'slate' },
+};
+
+let params = { ...PRESETS.coral };
+
+// Buffers
+let A, B, nA, nB;
+
+function init() {
+  const n = RW * RH;
+  A  = new Float32Array(n);
+  B  = new Float32Array(n);
+  nA = new Float32Array(n);
+  nB = new Float32Array(n);
+
+  // fill with A=1, B=0
+  A.fill(1);
+  B.fill(0);
+
+  // seed center cluster
+  seed(RW >> 1, RH >> 1, 12);
+
+  // a few random seeds
+  for (let i = 0; i < 6; i++) {
+    seed(
+      4 + Math.floor(Math.random() * (RW - 8)),
+      4 + Math.floor(Math.random() * (RH - 8)),
+      6
+    );
+  }
+}
+
+function seed(cx, cy, r) {
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx*dx + dy*dy > r*r) continue;
+      const x = (cx + dx + RW) % RW;
+      const y = (cy + dy + RH) % RH;
+      const i = y * RW + x;
+      A[i] = 0.5 + (Math.random() - 0.5) * 0.1;
+      B[i] = 0.25 + (Math.random() - 0.5) * 0.1;
+    }
+  }
+}
+
+// ---- step ----
+function step(steps = 8) {
+  const f = params.f, k = params.k;
+  const dA = params.dA, dB = params.dB;
+  const dt = 1.0;
+
+  for (let s = 0; s < steps; s++) {
+    for (let y = 0; y < RH; y++) {
+      const yn = ((y - 1 + RH) % RH) * RW;
+      const yp = ((y + 1) % RH) * RW;
+      const yc = y * RW;
+
+      for (let x = 0; x < RW; x++) {
+        const xn = (x - 1 + RW) % RW;
+        const xp = (x + 1) % RW;
+        const i = yc + x;
+
+        const a = A[i], b = B[i];
+
+        // Laplacian (5-point stencil)
+        const lA = A[yc + xn] + A[yc + xp] + A[yn + x] + A[yp + x] - 4 * a;
+        const lB = B[yc + xn] + B[yc + xp] + B[yn + x] + B[yp + x] - 4 * b;
+
+        const abb = a * b * b;
+
+        nA[i] = a + dt * (dA * lA - abb + f * (1 - a));
+        nB[i] = b + dt * (dB * lB + abb - (k + f) * b);
+
+        // clamp
+        if (nA[i] < 0) nA[i] = 0;
+        if (nA[i] > 1) nA[i] = 1;
+        if (nB[i] < 0) nB[i] = 0;
+        if (nB[i] > 1) nB[i] = 1;
+      }
+    }
+
+    // swap
+    const tmpA = A; A = nA; nA = tmpA;
+    const tmpB = B; B = nB; nB = tmpB;
+  }
+}
+
+// ---- color palettes ----
+const PALETTES = {
+  warm: (v) => {
+    // dark ink → warm gold → cream
+    const r = Math.min(255, Math.floor(v < 0.5 ? v * 2 * 80 : 80 + (v - 0.5) * 2 * 175));
+    const g = Math.min(255, Math.floor(v < 0.5 ? v * 2 * 55 : 55 + (v - 0.5) * 2 * 175));
+    const b = Math.min(255, Math.floor(v < 0.5 ? v * 2 * 30 : 30 + (v - 0.5) * 2 * 140));
+    return [r, g, b];
+  },
+  cool: (v) => {
+    // deep navy → slate → pale ice
+    const r = Math.min(255, Math.floor(v * 160 + 20));
+    const g = Math.min(255, Math.floor(v * 200 + 30));
+    const b = Math.min(255, Math.floor(v < 0.5 ? 60 + v * 2 * 120 : 180 + (v-0.5)*2*75));
+    return [r, g, b];
+  },
+  ochre: (v) => {
+    // charcoal → russet → saffron
+    const r = Math.min(255, Math.floor(v < 0.4 ? v/0.4 * 140 : 140 + (v-0.4)/0.6 * 115));
+    const g = Math.min(255, Math.floor(v < 0.4 ? v/0.4 * 80  : 80  + (v-0.4)/0.6 * 150));
+    const b = Math.min(255, Math.floor(v * 30));
+    return [r, g, b];
+  },
+  dark: (v) => {
+    // near black → deep violet → bright magenta
+    const r = Math.min(255, Math.floor(v < 0.6 ? v/0.6 * 100 : 100 + (v-0.6)/0.4 * 155));
+    const g = Math.min(255, Math.floor(v * 40));
+    const b = Math.min(255, Math.floor(v < 0.5 ? v * 2 * 100 : 100 + (v-0.5)*2*100));
+    return [r, g, b];
+  },
+  slate: (v) => {
+    // charcoal → steel blue → arctic white
+    const r = Math.min(255, Math.floor(v * 200 + 20));
+    const g = Math.min(255, Math.floor(v * 220 + 20));
+    const b = Math.min(255, Math.floor(v < 0.3 ? v/0.3 * 120 : 120 + (v-0.3)/0.7 * 135));
+    return [r, g, b];
+  },
+};
+
+// ---- render ----
+let imageData;
+function render() {
+  if (!imageData || imageData.width !== W || imageData.height !== H) {
+    imageData = ctx.createImageData(W, H);
+  }
+  const data = imageData.data;
+  const pal = PALETTES[params.palette];
+
+  for (let y = 0; y < RH; y++) {
+    for (let x = 0; x < RW; x++) {
+      const i = y * RW + x;
+      // visualize: A - B gives nice contrast
+      const v = Math.max(0, Math.min(1, A[i] - B[i]));
+      const [r, g, b] = pal(v);
+
+      // scale up
+      for (let dy = 0; dy < SCALE; dy++) {
+        for (let dx = 0; dx < SCALE; dx++) {
+          const px = ((y * SCALE + dy) * W + (x * SCALE + dx)) * 4;
+          data[px]   = r;
+          data[px+1] = g;
+          data[px+2] = b;
+          data[px+3] = 255;
+        }
+      }
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+// ---- mouse ----
+canvas.addEventListener('mousemove', e => {
+  if (e.buttons === 1) {
+    seed(
+      Math.floor(e.clientX / SCALE),
+      Math.floor(e.clientY / SCALE),
+      5
+    );
+  }
+});
+canvas.addEventListener('click', e => {
+  seed(
+    Math.floor(e.clientX / SCALE),
+    Math.floor(e.clientY / SCALE),
+    8
+  );
+});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  seed(
+    Math.floor(t.clientX / SCALE),
+    Math.floor(t.clientY / SCALE),
+    8
+  );
+}, { passive: false });
+
+// ---- presets ----
+document.querySelectorAll('.preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    params = { ...PRESETS[btn.dataset.preset] };
+    init();
+  });
+});
+
+// ---- loop ----
+let frameCount = 0;
+function loop() {
+  step(10);
+  if (frameCount % 1 === 0) render();
+  frameCount++;
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', resize);
+resize();
+loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2wordfic</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --paper: #f4f0e8;
+    --ink: #2a2218;
+    --fade: #9a9080;
+    --accent: #7a5c3a;
+  }
+
+  body {
+    background: var(--paper);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IM Fell English', Georgia, serif;
+    cursor: default;
+    overflow: hidden;
+  }
+
+  /* subtle paper texture via CSS */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 28px,
+        rgba(0,0,0,0.015) 28px,
+        rgba(0,0,0,0.015) 29px
+      );
+    pointer-events: none;
+  }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    max-width: 640px;
+    padding: 2rem;
+    position: relative;
+  }
+
+  .title {
+    font-size: 0.6rem;
+    letter-spacing: 0.4em;
+    color: var(--fade);
+    text-transform: lowercase;
+    margin-bottom: 4rem;
+  }
+
+  .fic-container {
+    position: relative;
+    text-align: center;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .word1, .word2 {
+    display: block;
+    font-size: clamp(2.4rem, 7vw, 4.2rem);
+    line-height: 1.1;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+
+  .word2 {
+    font-style: italic;
+    color: var(--accent);
+    font-size: clamp(2rem, 6vw, 3.6rem);
+  }
+
+  .fic-container.visible .word1 {
+    opacity: 1;
+    transform: translateY(0);
+    transition-delay: 0s;
+  }
+
+  .fic-container.visible .word2 {
+    opacity: 1;
+    transform: translateY(0);
+    transition-delay: 0.18s;
+  }
+
+  .divider {
+    width: 1px;
+    height: 0;
+    background: var(--fade);
+    margin: 0.6rem auto;
+    transition: height 0.4s ease 0.1s;
+    opacity: 0.4;
+  }
+
+  .fic-container.visible .divider {
+    height: 28px;
+  }
+
+  .gloss {
+    margin-top: 2.5rem;
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--fade);
+    min-height: 1.4em;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.6s ease 0.4s;
+    max-width: 400px;
+    line-height: 1.6;
+  }
+
+  .fic-container.visible .gloss {
+    opacity: 1;
+  }
+
+  .controls {
+    margin-top: 3.5rem;
+    display: flex;
+    gap: 1.2rem;
+    align-items: center;
+  }
+
+  button {
+    background: none;
+    border: none;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s;
+  }
+
+  button:hover { opacity: 0.7; transform: scale(0.97); }
+  button:active { transform: scale(0.94); }
+
+  .btn-main {
+    font-size: 0.65rem;
+    letter-spacing: 0.3em;
+    color: var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 2px;
+  }
+
+  .btn-subtle {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: var(--fade);
+    border-bottom: 1px solid var(--fade);
+    padding-bottom: 2px;
+  }
+
+  .history-strip {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    padding: 1rem 2rem;
+    overflow: hidden;
+  }
+
+  .history-item {
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    color: var(--fade);
+    opacity: 0.5;
+    white-space: nowrap;
+    transition: opacity 0.3s;
+    cursor: pointer;
+  }
+
+  .history-item:hover { opacity: 0.9; }
+
+  .mode-indicator {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.8rem;
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    color: var(--fade);
+    opacity: 0.6;
+  }
+
+  /* keyboard hint */
+  .hint {
+    position: fixed;
+    top: 1.5rem;
+    left: 1.8rem;
+    font-size: 0.55rem;
+    letter-spacing: 0.15em;
+    color: var(--fade);
+    opacity: 0.4;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="hint">space · next</div>
+<div class="mode-indicator" id="mode-indicator">automatic</div>
+
+<div class="stage">
+  <div class="title">2wordfic</div>
+
+  <div class="fic-container" id="fic">
+    <span class="word1" id="w1"></span>
+    <div class="divider"></div>
+    <span class="word2" id="w2"></span>
+    <div class="gloss" id="gloss"></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-main" id="btn-next">next →</button>
+    <button class="btn-subtle" id="btn-mode">auto: on</button>
+  </div>
+</div>
+
+<div class="history-strip" id="history"></div>
+
+<script>
+// ---- vocabulary ----
+// Organized into registers — the pairings matter
+
+const NOUNS = [
+  // concrete
+  'stone','water','salt','bone','ash','smoke','glass','wire','rope','rust',
+  'wood','leaf','root','seed','soil','dust','snow','rain','fire','ice',
+  'door','window','mirror','clock','key','lock','map','compass','lantern','thread',
+  'knife','cup','bowl','needle','cloth','coin','ring','bell','drum','horn',
+  // abstract
+  'grief','hunger','distance','mercy','silence','memory','debt','faith','doubt','shame',
+  'luck','fury','grace','weight','void','light','dark','heat','cold','edge',
+  'name','tongue','hand','eye','mouth','heart','spine','blood','breath','bone',
+  // less common
+  'archive','threshold','frequency','longitude','sediment','covenant','residue','vector',
+  'aperture','aftermath','inheritance','horizon','latitude','current','erosion','signal',
+  'warrant','cavity','specimen','interval','ledger','margin','gradient','remainder',
+];
+
+const VERBS = [
+  // intransitive motion
+  'returns','persists','dissolves','arrives','departs','rises','falls','waits','holds','breaks',
+  'moves','stops','opens','closes','turns','runs','walks','flies','sinks','floats',
+  'burns','bleeds','breathes','sleeps','wakes','grows','shrinks','bends','tears','mends',
+  // transitive
+  'carries','keeps','loses','finds','builds','unmakes','forgets','remembers','hides','reveals',
+  'seals','opens','reads','writes','speaks','listens','watches','touches','crosses','follows',
+  // more unusual
+  'accumulates','navigates','transmits','calculates','inherits','disperses','anchors','indexes',
+  'triangulates','sediments','resonates','calibrates','documents','witnesses','erases','persists',
+];
+
+const ADJECTIVES = [
+  'last','first','small','long','deep','bright','dark','old','young','strange',
+  'final','only','lost','still','cold','warm','near','far','soft','hard',
+  'thin','thick','light','heavy','hollow','whole','broken','slow','fast','quiet',
+  'third','second','borrowed','given','found','made','undone','twice','half','once',
+  'necessary','sufficient','approximate','irreversible','concurrent','residual',
+];
+
+const PROPER = [
+  'tuesday','april','november','january','saturday','sunday','autumn','winter','spring',
+  'south','north','east','west',
+];
+
+const PHRASES = [
+  // two-word combos that work as single semantic units
+  ['stone','remembers'], ['water','forgets'], ['salt','holds'], ['ash','arrives'],
+  ['bone','keeps'], ['grief','navigates'], ['silence','calculates'], ['mercy','sediments'],
+  ['smoke','persists'], ['rust','inherits'], ['dust','accumulates'], ['snow','documents'],
+  ['hunger','returns'], ['faith','disperses'], ['doubt','anchors'], ['shame','calibrates'],
+];
+
+// ---- gloss database ----
+// Some pairs get a gloss. Most don't. The absence is part of the game.
+const GLOSSES = {
+  'stone remembers': 'longer than us, shorter than stone',
+  'water forgets': 'every crossing is the first crossing',
+  'grief navigates': 'it knows the way without asking',
+  'silence calculates': 'the math runs whether you hear it or not',
+  'ash arrives': 'what fire was, in transit',
+  'mercy sediments': 'it takes time; that\'s not a flaw',
+  'hunger returns': 'not because it left',
+  'faith disperses': 'into smaller faiths; still faith',
+  'doubt anchors': 'the most honest keel there is',
+  'rust inherits': 'what iron had; more patient',
+  'dust accumulates': 'the only democracy',
+  'snow documents': 'everything, equally, and melts the record',
+};
+
+// ---- generation strategies ----
+
+function strategy_nounVerb() {
+  const n = pick(NOUNS);
+  const v = pick(VERBS);
+  return [n, v];
+}
+
+function strategy_adjNoun() {
+  const a = pick(ADJECTIVES);
+  const n = pick(NOUNS);
+  return [a, n];
+}
+
+function strategy_nounNoun() {
+  const n1 = pick(NOUNS);
+  let n2 = pick(NOUNS);
+  while (n2 === n1) n2 = pick(NOUNS);
+  return [n1, n2];
+}
+
+function strategy_properNoun() {
+  const p = pick(PROPER);
+  const n = pick(NOUNS);
+  return [p, n];
+}
+
+function strategy_properVerb() {
+  const p = pick(PROPER);
+  const v = pick(VERBS);
+  return [p, v];
+}
+
+function strategy_preset() {
+  const pair = pick(PHRASES);
+  return [pair[0], pair[1]];
+}
+
+const STRATEGIES = [
+  strategy_nounVerb,
+  strategy_nounVerb,
+  strategy_nounVerb,
+  strategy_adjNoun,
+  strategy_nounNoun,
+  strategy_properNoun,
+  strategy_properVerb,
+  strategy_preset,
+  strategy_preset,
+];
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function generate() {
+  const fn = pick(STRATEGIES);
+  const [w1, w2] = fn();
+  const gloss = GLOSSES[w1 + ' ' + w2] || GLOSSES[w2 + ' ' + w1] || '';
+  return { w1, w2, gloss };
+}
+
+// ---- state ----
+let current = null;
+let history = [];
+let autoMode = true;
+let autoInterval = null;
+const AUTO_DELAY = 5200;
+
+// ---- DOM ----
+const ficEl = document.getElementById('fic');
+const w1El = document.getElementById('w1');
+const w2El = document.getElementById('w2');
+const glossEl = document.getElementById('gloss');
+const historyEl = document.getElementById('history');
+const modeBtn = document.getElementById('btn-mode');
+const modeIndicator = document.getElementById('mode-indicator');
+
+function show(pair) {
+  ficEl.classList.remove('visible');
+
+  setTimeout(() => {
+    w1El.textContent = pair.w1;
+    w2El.textContent = pair.w2;
+    glossEl.textContent = pair.gloss;
+    ficEl.classList.add('visible');
+  }, 120);
+
+  current = pair;
+  addToHistory(pair);
+}
+
+function next() {
+  const pair = generate();
+  show(pair);
+}
+
+function addToHistory(pair) {
+  history.unshift(pair);
+  if (history.length > 6) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  // skip current (index 0), show 1–5
+  const items = history.slice(1, 6);
+  historyEl.innerHTML = items.map((p, i) =>
+    `<span class="history-item" style="opacity:${0.5 - i * 0.07}">${p.w1} ${p.w2}</span>`
+  ).join('');
+}
+
+function setAutoMode(on) {
+  autoMode = on;
+  if (autoInterval) clearInterval(autoInterval);
+  if (on) {
+    autoInterval = setInterval(next, AUTO_DELAY);
+    modeBtn.textContent = 'auto: on';
+    modeIndicator.textContent = 'automatic';
+  } else {
+    modeBtn.textContent = 'auto: off';
+    modeIndicator.textContent = 'manual';
+  }
+}
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  next();
+  if (autoMode) setAutoMode(true); // reset timer
+});
+
+modeBtn.addEventListener('click', () => {
+  setAutoMode(!autoMode);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    next();
+    if (autoMode) setAutoMode(true);
+  }
+  if (e.code === 'KeyA') setAutoMode(!autoMode);
+});
+
+// ---- init ----
+next();
+setAutoMode(true);
+</script>
+</body>
+</html>
