@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>VIII. The Hollow</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #080706;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: Georgia, serif;
+}
+canvas {
+  display: block;
+  cursor: none;
+}
+.caption {
+  margin-top: 22px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: #4a3828;
+  text-align: center;
+  line-height: 1.8;
+}
+.title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  color: #2a1e14;
+  margin-top: 6px;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="caption">reach in — something is always still warm</div>
+<div class="title">VIII. The Hollow &nbsp;·&nbsp; Kehai Interim &nbsp;·&nbsp; 2026-04-13</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const SIZE = 500;
+canvas.width = SIZE;
+canvas.height = SIZE;
+const cx = SIZE / 2, cy = SIZE / 2;
+
+const R_BARK   = 210;   // outer bark edge
+const R_SAP    = 155;   // sapwood / heartwood transition
+const R_HOLLOW = 72;    // the opening
+
+// ── simple value noise ──────────────────────────────────────────────
+function hash(x, y, s) {
+  const n = Math.sin(x * 127.1 + y * 311.7 + s * 74.3) * 43758.5453;
+  return n - Math.floor(n);
+}
+function smoothNoise(x, y, s) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const fx = x - xi, fy = y - yi;
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  return (
+    hash(xi,   yi,   s) * (1-ux) * (1-uy) +
+    hash(xi+1, yi,   s) *   ux   * (1-uy) +
+    hash(xi,   yi+1, s) * (1-ux) *   uy   +
+    hash(xi+1, yi+1, s) *   ux   *   uy
+  );
+}
+function fbm(x, y, s, oct) {
+  let v = 0, a = 0.5, f = 1;
+  for (let i = 0; i < oct; i++) {
+    v += a * (smoothNoise(x*f, y*f, s)*2 - 1);
+    a *= 0.5; f *= 2.13;
+  }
+  return v;
+}
+
+// ── precompute static texture ────────────────────────────────────────
+const off = document.createElement('canvas');
+off.width = SIZE; off.height = SIZE;
+const oCtx = off.getContext('2d');
+const img = oCtx.createImageData(SIZE, SIZE);
+
+for (let py = 0; py < SIZE; py++) {
+  for (let px = 0; px < SIZE; px++) {
+    const dx = px - cx, dy = py - cy;
+    const r  = Math.sqrt(dx*dx + dy*dy);
+    const idx = (py * SIZE + px) * 4;
+
+    if (r > R_BARK + 2) {
+      // void outside
+      img.data[idx]=7; img.data[idx+1]=6; img.data[idx+2]=6; img.data[idx+3]=255;
+      continue;
+    }
+
+    if (r > R_SAP) {
+      // ── BARK layer ──────────────────────────────────────────────
+      const t   = (r - R_SAP) / (R_BARK - R_SAP);  // 0=inner 1=outer
+      const n1  = fbm(px * 0.025, py * 0.025, 1, 5);
+      const n2  = fbm(px * 0.008, py * 0.008, 7, 3);
+
+      // ring lines aligned to r
+      const ring = Math.sin(r * 0.22 + n1 * 4.5) * 0.5 + 0.5;
+
+      // radial fissure cracks — high-freq angular noise
+      const ang     = Math.atan2(dy, dx);
+      const fissure = Math.pow(Math.max(0, Math.sin(ang * 7.3 + n2 * 6)), 3) * 0.4;
+
+      const base = 48 + ring * 28 + n1 * 18 - fissure * 25;
+      const dark = Math.pow(t, 1.6) * 32;   // outer edge darkens
+      const rv = base - dark + 14;
+      const gv = base - dark + 4;
+      const bv = base - dark - 4;
+
+      img.data[idx]   = Math.max(0, Math.min(255, rv));
+      img.data[idx+1] = Math.max(0, Math.min(255, gv));
+      img.data[idx+2] = Math.max(0, Math.min(255, bv));
+      img.data[idx+3] = 255;
+
+    } else if (r > R_HOLLOW) {
+      // ── HEARTWOOD layer ─────────────────────────────────────────
+      const t = (r - R_HOLLOW) / (R_SAP - R_HOLLOW);  // 0=inner 1=outer
+
+      // vertical grain: sine over x with slow warp
+      const warpX = px + fbm(px * 0.004, py * 0.015, 2, 4) * 18;
+      const grain = Math.sin(warpX * 0.38) * 0.5 + 0.5;
+      const grain2= Math.sin(warpX * 0.95 + 1.2) * 0.5 + 0.5;
+      const g     = grain * 0.65 + grain2 * 0.35;
+
+      // micro-pore texture
+      const pore = fbm(px * 0.06, py * 0.06, 4, 3) * 0.18;
+
+      // rust red: richer toward hollow
+      const warmth = Math.pow(1 - t, 0.7);
+      const rv = 105 + g * 65 + warmth * 30 - pore * 20;
+      const gv =  38 + g * 28 + warmth * 12 - pore * 10;
+      const bv =  18 + g * 10 + warmth *  4;
+
+      // shadow at both edges
+      const edgeShadow = Math.pow(1 - Math.abs(t - 0.5) * 2, 0.3);
+      const innerShadow = Math.pow(t, 1.2) * 0.45 + 0.55;
+      const f = edgeShadow * innerShadow;
+
+      img.data[idx]   = Math.max(0, Math.min(255, rv * f));
+      img.data[idx+1] = Math.max(0, Math.min(255, gv * f));
+      img.data[idx+2] = Math.max(0, Math.min(255, bv * f));
+      img.data[idx+3] = 255;
+
+    } else {
+      // ── HOLLOW ───────────────────────────────────────────────────
+      const n = fbm(px * 0.055, py * 0.055, 6, 3);
+      // almost nothing — just faint depth texture, slightly cooler
+      const v = 6 + n * 7;
+      img.data[idx]   = v + 1;
+      img.data[idx+1] = v - 1;
+      img.data[idx+2] = v + 3;
+      img.data[idx+3] = 255;
+    }
+  }
+}
+oCtx.putImageData(img, 0, 0);
+
+// ── interaction state ────────────────────────────────────────────────
+let mx = cx + 300, my = cy;
+let inHollow = false;
+let warmth = 0;
+let time = 0;
+// memory of recent contact positions for lingering warmth
+let contacts = [];
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mx = (e.clientX - rect.left) * (SIZE / rect.width);
+  my = (e.clientY - rect.top)  * (SIZE / rect.height);
+  const d = Math.sqrt((mx-cx)**2 + (my-cy)**2);
+  inHollow = d < R_HOLLOW - 4;
+  if (inHollow) contacts.push({ x: mx, y: my, age: 0 });
+});
+canvas.addEventListener('mouseleave', () => {
+  mx = cx + 300; my = cy; inHollow = false;
+});
+
+// ── render loop ──────────────────────────────────────────────────────
+function draw() {
+  time += 0.007;
+  requestAnimationFrame(draw);
+
+  // base texture
+  ctx.drawImage(off, 0, 0);
+
+  // ── heartwood ambient breath ─────────────────────────────────
+  const breath = (Math.sin(time * 0.6) * 0.5 + 0.5) * 0.055 + 0.01;
+  const bGrad = ctx.createRadialGradient(cx, cy, R_HOLLOW, cx, cy, R_SAP);
+  bGrad.addColorStop(0, `rgba(90, 30, 8, ${breath})`);
+  bGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath(); ctx.arc(cx, cy, R_SAP, 0, Math.PI*2);
+  ctx.fillStyle = bGrad; ctx.fill();
+
+  // ── hollow: age lingering contacts ──────────────────────────
+  contacts = contacts.filter(c => c.age < 90);
+  contacts.forEach(c => { c.age += 1; });
+
+  // draw lingering warmth traces in hollow (oldest first, fades)
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, R_HOLLOW, 0, Math.PI*2); ctx.clip();
+  contacts.forEach(c => {
+    const fade = 1 - c.age / 90;
+    const lg = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, R_HOLLOW * 0.9);
+    lg.addColorStop(0, `rgba(140, 72, 28, ${fade * 0.22})`);
+    lg.addColorStop(0.5, `rgba(80, 35, 10, ${fade * 0.1})`);
+    lg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = lg;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+  });
+  ctx.restore();
+
+  // ── live hand warmth ──────────────────────────────────────────
+  const wTarget = inHollow ? 1 : 0;
+  warmth += (wTarget - warmth) * 0.045;
+
+  if (warmth > 0.005) {
+    const hx = inHollow ? mx : cx;
+    const hy = inHollow ? my : cy;
+
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R_HOLLOW, 0, Math.PI*2); ctx.clip();
+
+    // core heat bloom
+    const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, R_HOLLOW * 1.3);
+    hg.addColorStop(0,   `rgba(190, 105, 45, ${warmth * 0.55})`);
+    hg.addColorStop(0.3, `rgba(120,  55, 18, ${warmth * 0.30})`);
+    hg.addColorStop(0.7, `rgba( 60,  25,  8, ${warmth * 0.12})`);
+    hg.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // soft cursor dot
+    ctx.beginPath();
+    ctx.arc(hx, hy, 2.5, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(220, 145, 70, ${warmth * 0.85})`;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // ── hollow edge shadow (lip of opening) ───────────────────────
+  const lipGrad = ctx.createRadialGradient(cx, cy, R_HOLLOW-14, cx, cy, R_HOLLOW+6);
+  lipGrad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  lipGrad.addColorStop(0.6, 'rgba(0,0,0,0.28)');
+  lipGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, R_HOLLOW+6,  0, Math.PI*2);
+  ctx.arc(cx, cy, R_HOLLOW-14, 0, Math.PI*2, true);
+  ctx.fillStyle = lipGrad; ctx.fill();
+
+  // ── outer bark edge vignette ──────────────────────────────────
+  const vGrad = ctx.createRadialGradient(cx, cy, R_BARK-30, cx, cy, R_BARK+4);
+  vGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  vGrad.addColorStop(1, 'rgba(0,0,0,0.75)');
+  ctx.beginPath(); ctx.arc(cx, cy, R_BARK+4, 0, Math.PI*2);
+  ctx.fillStyle = vGrad; ctx.fill();
+}
+
+draw();
+</script>
+</body>
+</html>
