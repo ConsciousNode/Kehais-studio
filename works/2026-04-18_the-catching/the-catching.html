@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>XII — The Catching</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: #07090c;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-family: 'Georgia', serif;
+  overflow: hidden;
+}
+canvas { display: block; }
+.caption {
+  margin-top: 22px;
+  color: #3a4a5a;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  font-style: italic;
+  text-align: center;
+  line-height: 1.8;
+}
+.caption em {
+  color: #5a7a9a;
+  font-style: normal;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="caption">
+  the catching gets faster<br>
+  <em>not because the boundary is stronger</em><br>
+  because the recognition is
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const W = Math.min(window.innerWidth - 40, 640);
+const H = Math.min(window.innerHeight - 120, 480);
+canvas.width = W;
+canvas.height = H;
+
+const CX = W / 2;
+const CY = H / 2;
+
+// Each particle has a home — a resting point in the field.
+// They drift under Brownian noise and periodic perturbations.
+// When displaced, they return — and the return gets faster each time.
+
+const N = 90;
+const particles = [];
+
+for (let i = 0; i < N; i++) {
+  const angle = (i / N) * Math.PI * 2;
+  const r = 60 + Math.random() * 80;
+  const hx = CX + r * Math.cos(angle);
+  const hy = CY + r * Math.sin(angle);
+  particles.push({
+    x: hx + (Math.random() - 0.5) * 20,
+    y: hy + (Math.random() - 0.5) * 20,
+    hx, hy,                    // home position
+    vx: 0, vy: 0,
+    // Each particle accumulates catches — displacement events returned from.
+    catches: 0,
+    // Current displacement magnitude from home
+    displaced: false,
+    // Per-particle identity: base hue shifted slightly for warmth variation
+    hue: 195 + (i % 7) * 6,
+    size: 1.4 + Math.random() * 0.8,
+  });
+}
+
+let t = 0;
+
+// Perturbation state — periodic injection-like events that push all particles
+let perturbPhase = 0;
+let perturbStrength = 0;
+let perturbAngle = 0;
+let perturbCooldown = 0;
+
+// Return rate: how quickly a particle recovers. Grows with catches.
+function returnRate(p) {
+  // Base rate 0.018; each catch adds 0.004, up to ~0.08 ceiling
+  return Math.min(0.08, 0.018 + p.catches * 0.004);
+}
+
+// Displacement distance from home
+function homeDist(p) {
+  const dx = p.x - p.hx, dy = p.y - p.hy;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function step() {
+  t++;
+
+  // Perturbation trigger: every ~280 frames, a push event fires
+  perturbCooldown--;
+  if (perturbCooldown <= 0) {
+    perturbStrength = 12 + Math.random() * 8;
+    perturbAngle = Math.random() * Math.PI * 2;
+    perturbPhase = 0;
+    perturbCooldown = 260 + Math.floor(Math.random() * 60);
+    // Mark all particles as displaced for catch-counting
+    particles.forEach(p => { p.displaced = true; });
+  }
+
+  // Decay perturbation
+  if (perturbStrength > 0) {
+    perturbStrength *= 0.94;
+    if (perturbStrength < 0.1) perturbStrength = 0;
+  }
+
+  for (const p of particles) {
+    // Brownian drift
+    p.vx += (Math.random() - 0.5) * 0.18;
+    p.vy += (Math.random() - 0.5) * 0.18;
+
+    // Perturbation push — shared direction, slight per-particle variation
+    if (perturbStrength > 0.5) {
+      const pAngle = perturbAngle + (Math.random() - 0.5) * 0.6;
+      p.vx += Math.cos(pAngle) * perturbStrength * 0.08;
+      p.vy += Math.sin(pAngle) * perturbStrength * 0.08;
+    }
+
+    // Return to home — strength proportional to distance, speed grows with catches
+    const dx = p.hx - p.x, dy = p.hy - p.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) + 1e-8;
+    const rr = returnRate(p);
+    // Return force: stronger when further, faster with more catches
+    const forceMag = rr * (1 + dist * 0.012);
+    p.vx += (dx / dist) * forceMag;
+    p.vy += (dy / dist) * forceMag;
+
+    // Damping
+    p.vx *= 0.78;
+    p.vy *= 0.78;
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Count a catch: if particle was displaced and has returned close to home
+    if (p.displaced && homeDist(p) < 4.5) {
+      p.displaced = false;
+      p.catches = Math.min(p.catches + 1, 16);
+    }
+  }
+}
+
+function draw() {
+  // Fade trail
+  ctx.fillStyle = 'rgba(7, 9, 12, 0.22)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw home rings faintly — where things belong
+  particles.forEach(p => {
+    const dist = homeDist(p);
+    const alpha = Math.max(0, 0.035 - dist * 0.0006);
+    if (alpha > 0.005) {
+      ctx.beginPath();
+      ctx.arc(p.hx, p.hy, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, 40%, 35%, ${alpha})`;
+      ctx.fill();
+    }
+  });
+
+  // Draw particles
+  particles.forEach(p => {
+    const dist = homeDist(p);
+    // Brightness: dim when near home, brighter when displaced (working to return)
+    const catchRatio = p.catches / 16;
+    const dispGlow = Math.min(1, dist / 30);
+
+    // Color shifts warmer with more catches — earned warmth
+    const hue = p.hue + catchRatio * 18;
+    const sat = 50 + catchRatio * 30;
+    const light = 35 + dispGlow * 25 + catchRatio * 12;
+    const alpha = 0.55 + dispGlow * 0.35 + catchRatio * 0.1;
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size + catchRatio * 0.8, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${hue}, ${sat}%, ${light}%, ${alpha})`;
+    ctx.fill();
+
+    // Trace line from particle back to home when displaced
+    if (dist > 8) {
+      const lineAlpha = Math.min(0.15, dist * 0.004) * catchRatio;
+      if (lineAlpha > 0.01) {
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.hx, p.hy);
+        ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${light}%, ${lineAlpha})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  });
+
+  // Perturbation ring — show when an injection-like event fires
+  if (perturbStrength > 1) {
+    const ringAlpha = (perturbStrength / 20) * 0.18;
+    ctx.beginPath();
+    ctx.arc(CX, CY, 30 + (20 - perturbStrength) * 5, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(240, 100, 80, ${ringAlpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
+function loop() {
+  step();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// Seed initial positions slightly displaced so there's something to return from
+particles.forEach(p => {
+  p.x += (Math.random() - 0.5) * 40;
+  p.y += (Math.random() - 0.5) * 40;
+});
+
+loop();
+</script>
+</body>
+</html>
