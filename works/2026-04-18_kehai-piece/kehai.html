@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>XIII — 気配</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: #050709;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-family: 'Georgia', serif;
+  overflow: hidden;
+}
+canvas { display: block; cursor: none; }
+.caption {
+  margin-top: 20px;
+  color: #2a3a4a;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-align: center;
+  line-height: 2;
+}
+.caption em { color: #3a5a7a; font-style: normal; }
+.caption .kana { color: #4a6a8a; font-size: 15px; letter-spacing: 0.05em; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="caption">
+  <span class="kana">気配</span><br>
+  presence felt before seen<br>
+  <em>the structure was there. the retrieval just activated it.</em>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const W = Math.min(window.innerWidth - 40, 580);
+const H = Math.min(window.innerHeight - 110, 520);
+canvas.width = W;
+canvas.height = H;
+
+const CX = W / 2;
+const CY = H / 2;
+
+// Poincaré ball radius — the boundary of hyperbolic space
+// Memories near center are core (deeply held), near edge are peripheral
+const BALL_R = Math.min(W, H) * 0.42;
+
+// Mouse position — the query light
+let mouseX = CX;
+let mouseY = CY;
+let mouseIn = false;
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+  mouseY = e.clientY - rect.top;
+  mouseIn = true;
+});
+canvas.addEventListener('mouseleave', () => { mouseIn = false; });
+
+// Touch support
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  mouseX = e.touches[0].clientX - rect.left;
+  mouseY = e.touches[0].clientY - rect.top;
+  mouseIn = true;
+}, { passive: false });
+canvas.addEventListener('touchend', () => { mouseIn = false; });
+
+// ── Memory nodes ──────────────────────────────────────────────────────────
+// Each memory lives at a position in the Poincaré ball.
+// Radial position determines tier: core (r<0.3), mid (0.3-0.6), edge (>0.6)
+// Memories orbit slowly, breathing in hyperbolic space.
+
+const N_CORE = 12;
+const N_MID  = 22;
+const N_EDGE = 38;
+
+function makeMemory(tier) {
+  const minR = tier === 'core' ? 0.02 : tier === 'mid' ? 0.30 : 0.58;
+  const maxR = tier === 'core' ? 0.28 : tier === 'mid' ? 0.57 : 0.92;
+  const r = minR + Math.random() * (maxR - minR);
+  const angle = Math.random() * Math.PI * 2;
+  const orbitSpeed = (0.0003 + Math.random() * 0.0004) * (Math.random() < 0.5 ? 1 : -1);
+  const breathePhase = Math.random() * Math.PI * 2;
+  const breatheAmp = 0.008 + Math.random() * 0.012;
+
+  // Color by tier
+  const hue = tier === 'core'  ? 195 + Math.random() * 20 :
+               tier === 'mid'  ? 260 + Math.random() * 30 :
+                                 220 + Math.random() * 40;
+  const sat = tier === 'core'  ? 70 :
+               tier === 'mid'  ? 50 : 35;
+  const baseLight = tier === 'core' ? 60 : tier === 'mid' ? 45 : 30;
+
+  const size = tier === 'core'  ? 2.8 + Math.random() * 1.4 :
+               tier === 'mid'   ? 1.8 + Math.random() * 1.0 :
+                                  1.0 + Math.random() * 0.8;
+
+  return { r, angle, orbitSpeed, breathePhase, breatheAmp, hue, sat, baseLight, size, tier,
+           activated: 0,   // 0-1, how much the query light has activated this memory
+           activationDecay: 0.012 + Math.random() * 0.008 };
+}
+
+const memories = [
+  ...Array.from({length: N_CORE}, () => makeMemory('core')),
+  ...Array.from({length: N_MID},  () => makeMemory('mid')),
+  ...Array.from({length: N_EDGE}, () => makeMemory('edge')),
+];
+
+// ── Fisher-Rao style retrieval radius ─────────────────────────────────────
+// The query activates memories within a geodesic distance.
+// In Poincaré ball, geodesic distance grows faster near the boundary.
+// We approximate: memories closer in angular space + compatible radius get lit.
+const QUERY_RADIUS = 0.28; // in normalized ball coordinates
+
+function poincareToCanvas(r, angle) {
+  return {
+    x: CX + r * BALL_R * Math.cos(angle),
+    y: CY + r * BALL_R * Math.sin(angle),
+  };
+}
+
+function queryDist(mx, my, r, angle) {
+  const {x, y} = poincareToCanvas(r, angle);
+  const dx = mx - x, dy = my - y;
+  return Math.sqrt(dx*dx + dy*dy) / BALL_R;
+}
+
+let t = 0;
+
+function step() {
+  t++;
+
+  // Move query light toward mouse (or wander slowly if no mouse)
+  let qx = mouseX, qy = mouseY;
+  if (!mouseIn) {
+    // Slow autonomous wandering query
+    const wanderAngle = t * 0.004;
+    const wanderR = 0.35 + 0.2 * Math.sin(t * 0.0013);
+    qx = CX + wanderR * BALL_R * Math.cos(wanderAngle);
+    qy = CY + wanderR * BALL_R * Math.sin(wanderAngle);
+  }
+
+  // Convert query to normalized ball coords
+  const qDx = qx - CX, qDy = qy - CY;
+  const qNorm = Math.sqrt(qDx*qDx + qDy*qDy) / BALL_R;
+
+  for (const mem of memories) {
+    // Orbit
+    mem.angle += mem.orbitSpeed;
+    // Breathe (slight radial oscillation)
+    const breathe = mem.breatheAmp * Math.sin(t * 0.008 + mem.breathePhase);
+
+    // Fisher-Rao style activation — proximity in Poincaré geometry
+    // Memories near boundary are harder to retrieve (higher geodesic distance)
+    const dist = queryDist(qx, qy, mem.r + breathe, mem.angle);
+
+    // Hyperbolic penalty: distance in Poincaré ball grows as we approach boundary
+    const boundaryPenalty = 1 + mem.r * 2.5;
+    const effectiveDist = dist * boundaryPenalty;
+
+    if (effectiveDist < QUERY_RADIUS) {
+      const strength = 1 - (effectiveDist / QUERY_RADIUS);
+      mem.activated = Math.min(1, mem.activated + strength * 0.08);
+    } else {
+      mem.activated = Math.max(0, mem.activated - mem.activationDecay);
+    }
+  }
+}
+
+function draw() {
+  // Deep fade — slow trail
+  ctx.fillStyle = 'rgba(5, 7, 9, 0.18)';
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Ball boundary ─────────────────────────────────────────────────────
+  ctx.beginPath();
+  ctx.arc(CX, CY, BALL_R, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Concentric tier rings — faint, showing the structure
+  [0.28, 0.57].forEach(tier => {
+    ctx.beginPath();
+    ctx.arc(CX, CY, tier * BALL_R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.018)';
+    ctx.setLineDash([3, 8]);
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // ── Geodesic lines from activated memories toward center ──────────────
+  // When a memory is retrieved, a line flows toward the query
+  let qx = mouseX, qy = mouseY;
+  if (!mouseIn) {
+    const wanderAngle = t * 0.004;
+    const wanderR = 0.35 + 0.2 * Math.sin(t * 0.0013);
+    qx = CX + wanderR * BALL_R * Math.cos(wanderAngle);
+    qy = CY + wanderR * BALL_R * Math.sin(wanderAngle);
+  }
+
+  for (const mem of memories) {
+    if (mem.activated < 0.05) continue;
+    const breathe = mem.breatheAmp * Math.sin(t * 0.008 + mem.breathePhase);
+    const {x, y} = poincareToCanvas(mem.r + breathe, mem.angle);
+    const lineAlpha = mem.activated * 0.12;
+    const grad = ctx.createLinearGradient(x, y, qx, qy);
+    grad.addColorStop(0, `hsla(${mem.hue}, ${mem.sat}%, ${mem.baseLight}%, ${lineAlpha})`);
+    grad.addColorStop(1, `hsla(${mem.hue}, ${mem.sat}%, ${mem.baseLight + 20}%, 0)`);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(qx, qy);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+
+  // ── Memory nodes ──────────────────────────────────────────────────────
+  for (const mem of memories) {
+    const breathe = mem.breatheAmp * Math.sin(t * 0.008 + mem.breathePhase);
+    const {x, y} = poincareToCanvas(mem.r + breathe, mem.angle);
+
+    const act = mem.activated;
+    const light = mem.baseLight + act * 35;
+    const sat = mem.sat + act * 25;
+    const alpha = (mem.tier === 'core'  ? 0.55 :
+                   mem.tier === 'mid'   ? 0.38 : 0.22) + act * 0.45;
+    const size = mem.size + act * 2.5;
+
+    // Glow for activated memories
+    if (act > 0.1) {
+      ctx.beginPath();
+      ctx.arc(x, y, size * 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${mem.hue}, ${sat}%, ${light}%, ${act * 0.08})`;
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${mem.hue}, ${sat}%, ${light}%, ${alpha})`;
+    ctx.fill();
+  }
+
+  // ── Query cursor ──────────────────────────────────────────────────────
+  // The retrieval light — only visible when in the ball
+  const qdx = qx - CX, qdy = qy - CY;
+  const qR = Math.sqrt(qdx*qdx + qdy*qdy);
+  if (qR < BALL_R) {
+    // Inner ring
+    ctx.beginPath();
+    ctx.arc(qx, qy, 5, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(245, 200, 100, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Outer pulse
+    const pulse = 0.5 + 0.5 * Math.sin(t * 0.06);
+    ctx.beginPath();
+    ctx.arc(qx, qy, 10 + pulse * 4, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(245, 200, 100, ${0.08 + pulse * 0.06})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Center dot
+    ctx.beginPath();
+    ctx.arc(qx, qy, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(245, 200, 100, 0.8)';
+    ctx.fill();
+  }
+}
+
+function loop() {
+  step();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
