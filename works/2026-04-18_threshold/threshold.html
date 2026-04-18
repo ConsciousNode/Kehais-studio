@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Threshold — Kehai Interim</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #080a0c;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Georgia', serif;
+    overflow: hidden;
+  }
+  canvas { display: block; cursor: none; }
+  #caption {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(180, 190, 210, 0.45);
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    font-style: italic;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="caption">the marks persist after the pressure releases</div>
+<script>
+// Piece X — Threshold
+// Kehai Interim, April 18 2026
+//
+// Two fields separated by a seam.
+// The seam is where the piece lives.
+// Mouse is the point of pressure.
+// Marks accumulate where contact happens.
+// Both sides are changed by what crosses.
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, mx = -1, my = -1;
+let marks = [];
+let particles = [];
+let t = 0;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// The seam — a slow, breathing vertical line near center
+// Not straight. Alive.
+function seamX(y, time) {
+  return W * 0.5
+    + Math.sin(y * 0.008 + time * 0.4) * 28
+    + Math.sin(y * 0.003 - time * 0.15) * 16
+    + Math.cos(y * 0.015 + time * 0.6) * 8;
+}
+
+function side(x, y, time) {
+  // -1 = left, +1 = right
+  return x < seamX(y, time) ? -1 : 1;
+}
+
+// A mark left at the threshold when something crosses
+class Mark {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.age = 0;
+    this.maxAge = 180 + Math.random() * 240;
+    this.r = 1.5 + Math.random() * 2.5;
+    this.hue = 195 + Math.random() * 40;
+  }
+  draw(ctx) {
+    const life = 1 - this.age / this.maxAge;
+    const alpha = life * life * 0.6;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * (0.5 + life * 0.5), 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${this.hue}, 60%, 72%, ${alpha})`;
+    ctx.fill();
+  }
+}
+
+// Particles that live on one side, drawn toward the seam
+class Particle {
+  constructor() { this.reset(); }
+  reset() {
+    // Start away from seam
+    const s = Math.random() < 0.5 ? -1 : 1;
+    this.side = s;
+    this.x = W * 0.5 + s * (W * 0.1 + Math.random() * W * 0.35);
+    this.y = Math.random() * H;
+    this.vx = 0;
+    this.vy = (Math.random() - 0.5) * 0.4;
+    this.size = 0.8 + Math.random() * 1.6;
+    this.hue = this.side < 0 ? 220 + Math.random() * 20 : 160 + Math.random() * 20;
+    this.life = 0.7 + Math.random() * 0.3;
+    this.crossed = false;
+  }
+
+  update(time) {
+    const sx = seamX(this.y, time);
+    const dist = this.x - sx;
+    const pull = -dist * 0.0012;  // pulled toward seam
+    this.vx += pull;
+    this.vx *= 0.96;
+    this.vy *= 0.995;
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // If near mouse, slight repulsion/perturbation
+    if (mx >= 0) {
+      const dx = this.x - mx, dy = this.y - my;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d < 80 && d > 0.1) {
+        this.vx += (dx/d) * (80-d) * 0.003;
+        this.vy += (dy/d) * (80-d) * 0.003;
+      }
+    }
+
+    // Check if crossed seam
+    const newSide = this.x < sx ? -1 : 1;
+    if (!this.crossed && newSide !== this.side) {
+      this.crossed = true;
+      marks.push(new Mark(this.x, this.y));
+    }
+
+    // Fade out after crossing or at edges
+    if (this.crossed) this.life -= 0.008;
+    if (this.x < 10 || this.x > W - 10 || this.y < 0 || this.y > H || this.life <= 0) {
+      this.reset();
+    }
+  }
+
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    const alpha = this.life * 0.7;
+    ctx.fillStyle = `hsla(${this.hue}, 55%, 65%, ${alpha})`;
+    ctx.fill();
+  }
+}
+
+// Seed particles
+for (let i = 0; i < 180; i++) particles.push(new Particle());
+
+// Mouse tracking
+canvas.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+canvas.addEventListener('mouseleave', () => { mx = -1; my = -1; });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  mx = e.touches[0].clientX; my = e.touches[0].clientY;
+}, { passive: false });
+
+function frame() {
+  t += 0.012;
+
+  // Background — two tones, divided by seam
+  // Draw left half slightly warmer, right slightly cooler
+  ctx.fillStyle = 'rgba(8, 10, 12, 0.18)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Seam glow
+  ctx.save();
+  ctx.beginPath();
+  for (let y = 0; y <= H; y += 4) {
+    const sx = seamX(y, t);
+    if (y === 0) ctx.moveTo(sx, y);
+    else ctx.lineTo(sx, y);
+  }
+  const grad = ctx.createLinearGradient(W*0.3, 0, W*0.7, 0);
+  grad.addColorStop(0, 'rgba(100, 160, 220, 0)');
+  grad.addColorStop(0.5, 'rgba(140, 190, 240, 0.12)');
+  grad.addColorStop(1, 'rgba(100, 160, 220, 0)');
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 2 + Math.sin(t * 0.7) * 0.8;
+  ctx.stroke();
+  ctx.restore();
+
+  // Marks
+  for (let i = marks.length - 1; i >= 0; i--) {
+    marks[i].draw(ctx);
+    marks[i].age++;
+    if (marks[i].age >= marks[i].maxAge) marks.splice(i, 1);
+  }
+
+  // Particles
+  for (const p of particles) {
+    p.update(t);
+    p.draw(ctx);
+  }
+
+  // Mouse: pressure point at seam
+  if (mx >= 0) {
+    const sx = seamX(my, t);
+    const dx = mx - sx;
+    const distToSeam = Math.abs(dx);
+    if (distToSeam < 120) {
+      const intensity = 1 - distToSeam / 120;
+      ctx.beginPath();
+      ctx.arc(mx, my, 3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(200, 220, 255, ${intensity * 0.8})`;
+      ctx.fill();
+
+      // Pressure halo
+      ctx.beginPath();
+      ctx.arc(mx, my, 12 + intensity * 8, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(180, 210, 255, ${intensity * 0.2})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Leave marks occasionally when near seam
+      if (distToSeam < 30 && Math.random() < 0.08) {
+        marks.push(new Mark(mx + (Math.random()-0.5)*20, my + (Math.random()-0.5)*20));
+      }
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+
+frame();
+</script>
+</body>
+</html>
