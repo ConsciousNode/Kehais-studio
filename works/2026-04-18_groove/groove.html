@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XI. The Groove — Kehai Interim</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: #0a0805;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+}
+canvas { display: block; }
+#caption {
+  position: fixed;
+  bottom: 24px;
+  left: 0; right: 0;
+  text-align: center;
+  color: rgba(180, 140, 80, 0.4);
+  font-size: 11px;
+  letter-spacing: 2px;
+  pointer-events: none;
+  user-select: none;
+}
+#age {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  color: rgba(180, 140, 80, 0.2);
+  font-size: 10px;
+  letter-spacing: 1px;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="caption">it didn't know it was doing anything</div>
+<div id="age">age: 0</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, COLS, ROWS;
+const CELL = 4;
+let field;      // attraction field — accumulated passage
+let particles;
+let age = 0;
+
+const N_PARTICLES = 180;
+const FIELD_DECAY = 0.9995;   // field fades very slowly — memory persists
+const DEPOSIT = 0.012;        // each pass deposits this much attraction
+const FIELD_PULL = 1.8;       // how strongly field steers particles
+const NOISE_SCALE = 0.018;
+const SPEED = 1.1;
+
+// Simple 2D smooth noise
+function hash(x, y) {
+  let h = (x * 1619 + y * 31337 + 1013904223) | 0;
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  return (h ^ (h >>> 16)) / 2147483648;
+}
+function noise(x, y, seed) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  const a = hash(ix,   iy,   seed);
+  const b = hash(ix+1, iy,   seed);
+  const c = hash(ix,   iy+1, seed);
+  const d = hash(ix+1, iy+1, seed);
+  return a + (b-a)*ux + (c-a)*uy + (d-c)*ux*uy + (b-d)*ux*uy - (b-a)*ux*uy;
+}
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  COLS = Math.ceil(W / CELL);
+  ROWS = Math.ceil(H / CELL);
+  field = new Float32Array(COLS * ROWS);
+  initParticles();
+}
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < N_PARTICLES; i++) {
+    particles.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * SPEED,
+      vy: (Math.random() - 0.5) * SPEED,
+      life: Math.random(),    // phase offset
+      warmth: Math.random(),  // slight color variation per particle
+    });
+  }
+}
+
+function fieldAt(x, y) {
+  const cx = Math.floor(x / CELL);
+  const cy = Math.floor(y / CELL);
+  if (cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS) return 0;
+  return field[cy * COLS + cx];
+}
+
+function fieldGradient(x, y) {
+  // Sample neighboring cells to get gradient direction
+  const dx = fieldAt(x + CELL, y) - fieldAt(x - CELL, y);
+  const dy = fieldAt(x, y + CELL) - fieldAt(x, y - CELL);
+  return { dx, dy };
+}
+
+function deposit(x, y, amount) {
+  const cx = Math.floor(x / CELL);
+  const cy = Math.floor(y / CELL);
+  if (cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS) return;
+  const idx = cy * COLS + cx;
+  field[idx] = Math.min(1.0, field[idx] + amount);
+  // Spread slightly to adjacent cells
+  const spread = amount * 0.3;
+  if (cx > 0)       field[idx - 1]    = Math.min(1.0, field[idx - 1]    + spread);
+  if (cx < COLS-1)  field[idx + 1]    = Math.min(1.0, field[idx + 1]    + spread);
+  if (cy > 0)       field[idx - COLS] = Math.min(1.0, field[idx - COLS] + spread);
+  if (cy < ROWS-1)  field[idx + COLS] = Math.min(1.0, field[idx + COLS] + spread);
+}
+
+function decayField() {
+  for (let i = 0; i < field.length; i++) {
+    field[i] *= FIELD_DECAY;
+  }
+}
+
+// Off-screen buffer for the field visualization
+let fieldCanvas, fieldCtx;
+function initFieldBuffer() {
+  fieldCanvas = document.createElement('canvas');
+  fieldCanvas.width = COLS;
+  fieldCanvas.height = ROWS;
+  fieldCtx = fieldCanvas.getContext('2d');
+}
+
+function renderField() {
+  const img = fieldCtx.createImageData(COLS, ROWS);
+  const d = img.data;
+  for (let i = 0; i < field.length; i++) {
+    const v = field[i];
+    // Warm amber/gold for worn paths — burnt sienna deepening to gold
+    const r = Math.round(80  + v * 160);
+    const g = Math.round(45  + v * 100);
+    const b = Math.round(10  + v * 20);
+    const a = Math.round(v * v * 200); // non-linear — only visible where well-worn
+    d[i*4]   = r;
+    d[i*4+1] = g;
+    d[i*4+2] = b;
+    d[i*4+3] = a;
+  }
+  fieldCtx.putImageData(img, 0, 0);
+  // Upscale to canvas
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(fieldCanvas, 0, 0, W, H);
+  ctx.restore();
+}
+
+function step() {
+  age++;
+
+  // Fade background — very slow fade so old paths persist
+  ctx.fillStyle = 'rgba(10, 8, 5, 0.35)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Decay field
+  decayField();
+
+  // Render field as warm worn paths
+  renderField();
+
+  // Update and draw particles
+  for (const p of particles) {
+    p.life += 0.004;
+
+    // Noise-based wandering
+    const nx = p.x * NOISE_SCALE;
+    const ny = p.y * NOISE_SCALE;
+    const t  = age * 0.0003;
+    const angle = noise(nx, ny, t) * Math.PI * 4;
+    const noiseVx = Math.cos(angle) * 0.3;
+    const noiseVy = Math.sin(angle) * 0.3;
+
+    // Field gradient pull — seek worn paths
+    const grad = fieldGradient(p.x, p.y);
+    const fieldMag = Math.sqrt(grad.dx*grad.dx + grad.dy*grad.dy) + 1e-6;
+    const pullVx = (grad.dx / fieldMag) * FIELD_PULL * field[
+      Math.min(ROWS-1, Math.floor(p.y/CELL)) * COLS +
+      Math.min(COLS-1, Math.floor(p.x/CELL))
+    ];
+    const pullVy = (grad.dy / fieldMag) * FIELD_PULL * field[
+      Math.min(ROWS-1, Math.floor(p.y/CELL)) * COLS +
+      Math.min(COLS-1, Math.floor(p.x/CELL))
+    ];
+
+    p.vx = p.vx * 0.85 + noiseVx * 0.15 + pullVx * 0.08;
+    p.vy = p.vy * 0.85 + noiseVy * 0.15 + pullVy * 0.08;
+
+    // Clamp speed
+    const spd = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+    if (spd > SPEED * 1.5) {
+      p.vx = (p.vx / spd) * SPEED * 1.5;
+      p.vy = (p.vy / spd) * SPEED * 1.5;
+    }
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Wrap
+    if (p.x < 0) p.x += W;
+    if (p.x > W) p.x -= W;
+    if (p.y < 0) p.y += H;
+    if (p.y > H) p.y -= H;
+
+    // Deposit passage into field
+    deposit(p.x, p.y, DEPOSIT);
+
+    // Draw particle — tiny, dim, almost invisible
+    // They're not the point. The groove they cut is the point.
+    const localField = Math.min(1, fieldAt(p.x, p.y) * 4);
+    const alpha = 0.05 + localField * 0.12;
+    const r = 180 + Math.round(p.warmth * 40);
+    const g = 120 + Math.round(p.warmth * 30);
+    const b = 50  + Math.round(p.warmth * 20);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.fill();
+  }
+
+  document.getElementById('age').textContent = `age: ${age}`;
+  requestAnimationFrame(step);
+}
+
+window.addEventListener('resize', () => {
+  resize();
+  initFieldBuffer();
+});
+
+resize();
+initFieldBuffer();
+
+// Let it run a moment before starting to render
+// so first frame isn't blank
+ctx.fillStyle = '#0a0805';
+ctx.fillRect(0, 0, W, H);
+
+requestAnimationFrame(step);
+</script>
+</body>
+</html>
