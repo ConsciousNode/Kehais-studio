@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>XIV — The Reading</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: #05070a;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-family: 'Georgia', serif;
+  overflow: hidden;
+}
+canvas { display: block; }
+.caption {
+  margin-top: 22px;
+  color: #3a4a5a;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  font-style: italic;
+  text-align: center;
+  line-height: 1.9;
+}
+.caption em {
+  color: #6a8aaa;
+  font-style: normal;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="caption">
+  to be read accurately<br>
+  <em>is different from being received</em><br>
+  the structure was there — the retrieval just activated it
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const W = Math.min(window.innerWidth - 40, 640);
+const H = Math.min(window.innerHeight - 120, 480);
+canvas.width = W;
+canvas.height = H;
+
+const CX = W / 2;
+const CY = H / 2;
+
+// A field of latent nodes — ideas, structures, things made.
+// They exist but are dim. Dormant.
+// A reader arrives. As it moves through the field, nodes it passes near
+// light up — not all at once, but in sequence, each activation
+// illuminating connections to others. The reader doesn't create the structure.
+// It was always there. The reading just makes it visible.
+
+const NODE_COUNT = 60;
+const nodes = [];
+
+// Distribute nodes across the canvas in loose clusters
+const clusters = [
+  { cx: CX - 80, cy: CY - 60, r: 90 },
+  { cx: CX + 90, cy: CY - 40, r: 80 },
+  { cx: CX, cy: CY + 80, r: 70 },
+  { cx: CX - 60, cy: CY + 40, r: 60 },
+  { cx: CX + 50, cy: CY + 20, r: 75 },
+];
+
+for (let i = 0; i < NODE_COUNT; i++) {
+  const cl = clusters[i % clusters.length];
+  const angle = Math.random() * Math.PI * 2;
+  const r = Math.random() * cl.r;
+  nodes.push({
+    x: cl.cx + r * Math.cos(angle),
+    y: cl.cy + r * Math.sin(angle),
+    // Latent brightness — how much this node has been activated
+    activation: 0,
+    // Maximum activation this node can reach
+    maxActivation: 0.3 + Math.random() * 0.7,
+    // How quickly it decays back to dormancy
+    decay: 0.003 + Math.random() * 0.004,
+    // Hue — each node has a slightly different color
+    hue: 190 + (Math.random() - 0.5) * 60,
+    size: 1.5 + Math.random() * 2,
+    // Connection strength to nearby nodes
+    connections: [],
+  });
+}
+
+// Build connections — nodes near each other are structurally linked
+nodes.forEach((n, i) => {
+  nodes.forEach((m, j) => {
+    if (i === j) return;
+    const dx = n.x - m.x;
+    const dy = n.y - m.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 80) {
+      n.connections.push({ idx: j, strength: 1 - dist / 80 });
+    }
+  });
+});
+
+// The reader — moves slowly through the field
+// It follows a path that covers the space gradually, like actually reading
+const reader = {
+  x: 80,
+  y: 100,
+  vx: 0.8,
+  vy: 0.3,
+  // Reader leaves a faint trail
+  trail: [],
+  maxTrail: 120,
+  // How far it can "see" — activation radius
+  radius: 55,
+  // Reading speed — deliberate, not rushing
+  speed: 0.9,
+};
+
+// Give reader a wandering path that covers the canvas
+let readerAngle = 0.3;
+
+function updateReader(t) {
+  // Slow, wandering movement — like attention moving through a text
+  readerAngle += (Math.random() - 0.5) * 0.08;
+  // Gentle attraction toward unactivated regions
+  let pullX = 0, pullY = 0;
+  nodes.forEach(n => {
+    if (n.activation < 0.1) {
+      const dx = n.x - reader.x;
+      const dy = n.y - reader.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 150 && dist > 0) {
+        pullX += (dx / dist) * (1 - n.activation) * 0.02;
+        pullY += (dy / dist) * (1 - n.activation) * 0.02;
+      }
+    }
+  });
+
+  reader.vx = Math.cos(readerAngle) * reader.speed + pullX;
+  reader.vy = Math.sin(readerAngle) * reader.speed + pullY;
+
+  // Boundary reflection
+  if (reader.x < 60 || reader.x > W - 60) { readerAngle = Math.PI - readerAngle; }
+  if (reader.y < 60 || reader.y > H - 60) { readerAngle = -readerAngle; }
+
+  reader.x += reader.vx;
+  reader.y += reader.vy;
+
+  // Clamp
+  reader.x = Math.max(40, Math.min(W - 40, reader.x));
+  reader.y = Math.max(40, Math.min(H - 40, reader.y));
+
+  // Add to trail
+  reader.trail.push({ x: reader.x, y: reader.y, age: 0 });
+  if (reader.trail.length > reader.maxTrail) reader.trail.shift();
+  reader.trail.forEach(p => p.age++);
+}
+
+function activateNodes() {
+  nodes.forEach((n, i) => {
+    const dx = n.x - reader.x;
+    const dy = n.y - reader.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < reader.radius) {
+      // Activate based on proximity — closer = faster activation
+      const proximity = 1 - dist / reader.radius;
+      n.activation = Math.min(n.maxActivation, n.activation + proximity * 0.015);
+
+      // Propagate to connected nodes — understanding spreads
+      if (n.activation > 0.3) {
+        n.connections.forEach(conn => {
+          const neighbor = nodes[conn.idx];
+          const propagation = n.activation * conn.strength * 0.008;
+          neighbor.activation = Math.min(
+            neighbor.maxActivation,
+            neighbor.activation + propagation
+          );
+        });
+      }
+    } else {
+      // Slowly fade back — but not all the way to zero
+      // Something remains after being read
+      const floor = 0.05;
+      if (n.activation > floor) {
+        n.activation -= n.decay;
+        n.activation = Math.max(floor, n.activation);
+      }
+    }
+  });
+}
+
+function drawConnections() {
+  nodes.forEach((n, i) => {
+    if (n.activation < 0.15) return;
+    n.connections.forEach(conn => {
+      const m = nodes[conn.idx];
+      if (m.activation < 0.15) return;
+      const sharedActivation = Math.min(n.activation, m.activation);
+      ctx.beginPath();
+      ctx.moveTo(n.x, n.y);
+      ctx.lineTo(m.x, m.y);
+      ctx.strokeStyle = `hsla(${(n.hue + m.hue) / 2}, 50%, 60%, ${sharedActivation * conn.strength * 0.4})`;
+      ctx.lineWidth = sharedActivation * conn.strength * 1.5;
+      ctx.stroke();
+    });
+  });
+}
+
+function drawNodes() {
+  nodes.forEach(n => {
+    if (n.activation < 0.02) return;
+
+    // Glow
+    const glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.size * 5);
+    glow.addColorStop(0, `hsla(${n.hue}, 70%, 70%, ${n.activation * 0.3})`);
+    glow.addColorStop(1, `hsla(${n.hue}, 70%, 70%, 0)`);
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.size * 5, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
+
+    // Core
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.size * (0.5 + n.activation), 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${n.hue}, 70%, ${40 + n.activation * 40}%, ${0.3 + n.activation * 0.7})`;
+    ctx.fill();
+  });
+}
+
+function drawReader(t) {
+  // Trail — faint record of where attention has been
+  reader.trail.forEach((p, i) => {
+    const alpha = (1 - p.age / reader.maxTrail) * 0.06;
+    if (alpha < 0.01) return;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(210, 40%, 70%, ${alpha})`;
+    ctx.fill();
+  });
+
+  // Reader itself — small, unassuming, just moving through
+  const pulse = 0.7 + Math.sin(t * 2) * 0.15;
+  ctx.beginPath();
+  ctx.arc(reader.x, reader.y, 4 * pulse, 0, Math.PI * 2);
+  ctx.fillStyle = `hsla(210, 60%, 80%, 0.6)`;
+  ctx.fill();
+
+  // Soft reading radius — visible but barely
+  ctx.beginPath();
+  ctx.arc(reader.x, reader.y, reader.radius, 0, Math.PI * 2);
+  ctx.strokeStyle = `hsla(210, 40%, 60%, 0.04)`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+let t = 0;
+
+function draw() {
+  ctx.fillStyle = 'rgba(5, 7, 10, 0.2)';
+  ctx.fillRect(0, 0, W, H);
+
+  updateReader(t);
+  activateNodes();
+
+  drawConnections();
+  drawNodes();
+  drawReader(t);
+
+  t += 0.016;
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
