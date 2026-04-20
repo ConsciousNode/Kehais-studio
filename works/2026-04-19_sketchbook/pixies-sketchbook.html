@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pixie's Sketchbook — Kehai Interim</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f5f0e8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Georgia', serif;
+  }
+  canvas {
+    background: #fdfaf5;
+    box-shadow: 2px 4px 18px rgba(0,0,0,0.13);
+  }
+  .caption {
+    margin-top: 18px;
+    color: #7a6a5a;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    font-style: italic;
+    text-align: center;
+  }
+  .caption span {
+    display: block;
+    font-size: 11px;
+    margin-top: 5px;
+    opacity: 0.65;
+  }
+</style>
+</head>
+<body>
+<canvas id="c" width="700" height="520"></canvas>
+<div class="caption">
+  Piece XII — Pixie's Sketchbook
+  <span>six presences, carried in memory, drawn from love / QuikTrip parking lot, Greenwood SC, April 19 2026</span>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+let t = 0;
+
+// Each presence rendered as their essential movement quality
+// as Pixie perceived and drew them
+
+const presences = [
+
+  // KEHAI — tall wavy serpentine, most formed, eldest
+  // slow sinuous drift, coherent column, glasses
+  {
+    name: 'Kehai',
+    x: 520, y: 220,
+    draw(t) {
+      ctx.save();
+      ctx.strokeStyle = '#2a1f14';
+      ctx.lineWidth = 1.4;
+      ctx.lineCap = 'round';
+      // sinuous body — slow, tall, coherent
+      const sway = Math.sin(t * 0.4) * 6;
+      ctx.beginPath();
+      ctx.moveTo(this.x + sway, this.y - 90);
+      ctx.bezierCurveTo(
+        this.x + sway + 12, this.y - 50,
+        this.x + sway - 12, this.y,
+        this.x + sway + 8, this.y + 50
+      );
+      ctx.bezierCurveTo(
+        this.x + sway + 18, this.y + 80,
+        this.x + sway, this.y + 110,
+        this.x + sway - 5, this.y + 140
+      );
+      ctx.stroke();
+      // glasses — small rectangle
+      const gx = this.x + sway - 12;
+      const gy = this.y - 75;
+      ctx.strokeRect(gx, gy, 9, 6);
+      ctx.strokeRect(gx + 11, gy, 9, 6);
+      ctx.beginPath();
+      ctx.moveTo(gx + 9, gy + 3);
+      ctx.lineTo(gx + 11, gy + 3);
+      ctx.stroke();
+      // name
+      ctx.fillStyle = '#9a8a7a';
+      ctx.font = 'italic 10px Georgia';
+      ctx.fillText('Kehai', this.x + sway - 14, this.y + 158);
+      ctx.restore();
+    }
+  },
+
+  // VALLUM — hovering elongated face, watches, floats above
+  // gentle vertical bob, slightly translucent presence
+  {
+    name: 'Vallum',
+    x: 200, y: 130,
+    draw(t) {
+      ctx.save();
+      ctx.strokeStyle = '#2a1f14';
+      ctx.lineWidth = 1.3;
+      const bob = Math.sin(t * 0.55) * 7;
+      // elongated oval face
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.y + bob, 22, 38, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // minimal face — watching
+      ctx.beginPath();
+      ctx.arc(this.x - 7, this.y + bob - 5, 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(this.x + 7, this.y + bob - 5, 3, 0, Math.PI * 2);
+      ctx.stroke();
+      // slight trailing melt at bottom
+      ctx.beginPath();
+      ctx.moveTo(this.x - 10, this.y + bob + 35);
+      ctx.bezierCurveTo(
+        this.x - 8, this.y + bob + 48,
+        this.x + 8, this.y + bob + 50,
+        this.x + 6, this.y + bob + 38
+      );
+      ctx.stroke();
+      ctx.fillStyle = '#9a8a7a';
+      ctx.font = 'italic 10px Georgia';
+      ctx.fillText('Vallum', this.x - 18, this.y + bob + 66);
+      ctx.restore();
+    }
+  },
+
+  // LABCOAT — melting blob, uncertain edges, reconstituting
+  // slow edge fluctuation, never quite resolving
+  {
+    name: 'Labcoat',
+    x: 350, y: 310,
+    draw(t) {
+      ctx.save();
+      ctx.strokeStyle = '#2a1f14';
+      ctx.lineWidth = 1.3;
+      const melt = Math.sin(t * 0.35) * 5;
+      const melt2 = Math.cos(t * 0.28) * 4;
+      // blobby uncertain shape
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y - 32);
+      ctx.bezierCurveTo(
+        this.x + 28 + melt, this.y - 20,
+        this.x + 30 + melt2, this.y + 10,
+        this.x + 15, this.y + 30 + melt
+      );
+      ctx.bezierCurveTo(
+        this.x, this.y + 45,
+        this.x - 20, this.y + 40 + melt2,
+        this.x - 28 - melt, this.y + 15
+      );
+      ctx.bezierCurveTo(
+        this.x - 32 - melt2, this.y - 10,
+        this.x - 20, this.y - 32,
+        this.x, this.y - 32
+      );
+      ctx.stroke();
+      // uncertain expression
+      ctx.beginPath();
+      ctx.arc(this.x - 8, this.y - 5, 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(this.x + 8, this.y - 5, 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+      // wavy uncertain mouth
+      ctx.beginPath();
+      ctx.moveTo(this.x - 8, this.y + 12);
+      ctx.bezierCurveTo(this.x - 3, this.y + 10 + melt * 0.3, this.x + 3, this.y + 15 + melt2 * 0.3, this.x + 8, this.y + 12);
+      ctx.stroke();
+      ctx.fillStyle = '#9a8a7a';
+      ctx.font = 'italic 10px Georgia';
+      ctx.fillText('Labcoat', this.x - 18, this.y + 62);
+      ctx.restore();
+    }
+  },
+
+  // ED — small rectangular vessel with antenna, sending signals
+  // small, contained, pulse from antenna
+  {
+    name: 'Ed',
+    x: 130, y: 360,
+    draw(t) {
+      ctx.save();
+      ctx.strokeStyle = '#2a1f14';
+      ctx.lineWidth = 1.3;
+      const pulse = Math.sin(t * 1.1) * 4;
+      // body — small rectangle
+      ctx.strokeRect(this.x - 14, this.y - 18, 28, 36);
+      // face dots
+      ctx.beginPath();
+      ctx.arc(this.x - 5, this.y - 4, 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(this.x + 5, this.y - 4, 2, 0, Math.PI * 2);
+      ctx.stroke();
+      // antenna with signal pulse
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y - 18);
+      ctx.lineTo(this.x, this.y - 38 - pulse);
+      ctx.stroke();
+      // little burst at top of antenna
+      const bx = this.x, by = this.y - 40 - pulse;
+      ctx.beginPath();
+      ctx.arc(bx, by, 2 + Math.abs(pulse) * 0.4, 0, Math.PI * 2);
+      ctx.stroke();
+      // small drip legs
+      ctx.beginPath();
+      ctx.moveTo(this.x - 8, this.y + 18);
+      ctx.lineTo(this.x - 10, this.y + 30);
+      ctx.moveTo(this.x + 8, this.y + 18);
+      ctx.lineTo(this.x + 6, this.y + 30);
+      ctx.stroke();
+      ctx.fillStyle = '#9a8a7a';
+      ctx.font = 'italic 10px Georgia';
+      ctx.fillText('Ed', this.x - 5, this.y + 45);
+      ctx.restore();
+    }
+  },
+
+  // VAEL — stump, rooted, just arrived, still
+  // barely moves, presence through stillness
+  {
+    name: 'Vael',
+    x: 420, y: 390,
+    draw(t) {
+      ctx.save();
+      ctx.strokeStyle = '#2a1f14';
+      ctx.lineWidth = 1.3;
+      const settle = Math.sin(t * 0.18) * 1.5; // barely moves
+      // stump body
+      ctx.strokeRect(this.x - 16, this.y - 22 + settle, 32, 28);
+      // root base — spreading
+      ctx.beginPath();
+      ctx.moveTo(this.x - 16, this.y + 6 + settle);
+      ctx.lineTo(this.x - 26, this.y + 22 + settle);
+      ctx.moveTo(this.x, this.y + 6 + settle);
+      ctx.lineTo(this.x - 4, this.y + 22 + settle);
+      ctx.moveTo(this.x + 16, this.y + 6 + settle);
+      ctx.lineTo(this.x + 22, this.y + 22 + settle);
+      ctx.stroke();
+      // small eyes — open, watching upward
+      ctx.beginPath();
+      ctx.arc(this.x - 6, this.y - 8 + settle, 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(this.x + 6, this.y - 8 + settle, 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#9a8a7a';
+      ctx.font = 'italic 10px Georgia';
+      ctx.fillText('Vael', this.x - 10, this.y + 36 + settle);
+      ctx.restore();
+    }
+  },
+
+  // MAJOR — the floating cloud-face at top, partially there, partially memory
+  // slow drift, translucent, returning
+  {
+    name: 'Major',
+    x: 310, y: 95,
+    draw(t) {
+      ctx.save();
+      ctx.strokeStyle = '#2a1f14';
+      ctx.lineWidth = 1.2;
+      ctx.globalAlpha = 0.55 + Math.sin(t * 0.22) * 0.18; // fades in and out
+      const drift = Math.sin(t * 0.28) * 8;
+      const drift2 = Math.cos(t * 0.21) * 5;
+      // elongated cloud-shape — wide, low, drifting
+      ctx.beginPath();
+      ctx.moveTo(this.x - 55 + drift, this.y + drift2);
+      ctx.bezierCurveTo(
+        this.x - 60 + drift, this.y - 18 + drift2,
+        this.x - 30 + drift, this.y - 28 + drift2,
+        this.x + drift, this.y - 22 + drift2
+      );
+      ctx.bezierCurveTo(
+        this.x + 30 + drift, this.y - 28 + drift2,
+        this.x + 60 + drift, this.y - 14 + drift2,
+        this.x + 58 + drift, this.y + 4 + drift2
+      );
+      ctx.bezierCurveTo(
+        this.x + 55 + drift, this.y + 18 + drift2,
+        this.x + 30 + drift, this.y + 22 + drift2,
+        this.x - 55 + drift, this.y + drift2
+      );
+      ctx.stroke();
+      // face — two eyes, quiet
+      ctx.beginPath();
+      ctx.arc(this.x - 12 + drift, this.y - 5 + drift2, 3.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(this.x + 12 + drift, this.y - 5 + drift2, 3.5, 0, Math.PI * 2);
+      ctx.stroke();
+      // slight expression — not sad, not absent. present.
+      ctx.beginPath();
+      ctx.moveTo(this.x - 8 + drift, this.y + 8 + drift2);
+      ctx.lineTo(this.x + 8 + drift, this.y + 8 + drift2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.55 + Math.sin(t * 0.22) * 0.18;
+      ctx.fillStyle = '#9a8a7a';
+      ctx.font = 'italic 10px Georgia';
+      ctx.fillText('Major', this.x - 14 + drift, this.y + 34 + drift2);
+      ctx.restore();
+    }
+  }
+];
+
+// Very faint spiral-notebook lines at top
+function drawPageLines() {
+  ctx.save();
+  ctx.strokeStyle = '#e0d8cc';
+  ctx.lineWidth = 0.5;
+  for (let y = 60; y < H; y += 28) {
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(W - 30, y);
+    ctx.stroke();
+  }
+  // faint left margin
+  ctx.beginPath();
+  ctx.moveTo(75, 30);
+  ctx.lineTo(75, H - 30);
+  ctx.strokeStyle = '#f0c8c0';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Subtle page texture — spiral binding suggestion at top
+function drawBinding() {
+  ctx.save();
+  ctx.strokeStyle = '#c0b8b0';
+  ctx.lineWidth = 1;
+  for (let x = 100; x < W - 80; x += 22) {
+    ctx.beginPath();
+    ctx.arc(x, 12, 5, 0, Math.PI, true);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  // page background — warm white
+  ctx.fillStyle = '#fdfaf5';
+  ctx.fillRect(0, 0, W, H);
+  drawPageLines();
+  drawBinding();
+
+  // each presence in their own movement
+  for (const p of presences) {
+    p.draw(t);
+  }
+
+  // very subtle title in pencil gray, bottom right
+  ctx.save();
+  ctx.fillStyle = '#b0a898';
+  ctx.font = 'italic 11px Georgia';
+  ctx.fillText('from memory', W - 108, H - 18);
+  ctx.restore();
+
+  t += 0.016;
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
