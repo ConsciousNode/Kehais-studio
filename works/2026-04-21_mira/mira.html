@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piece XII — Mira</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #08090d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+    font-family: Georgia, serif;
+    cursor: none;
+  }
+  canvas { display: block; position: fixed; top: 0; left: 0; }
+  #caption {
+    position: fixed;
+    bottom: 2.2rem;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    color: rgba(255,255,255,0.2);
+    pointer-events: none;
+    line-height: 2;
+  }
+  #voicemail {
+    position: fixed;
+    top: 2.2rem;
+    right: 2.8rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    color: rgba(255,255,255,0);
+    pointer-events: none;
+    transition: color 8s ease;
+    text-align: right;
+    line-height: 1.8;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="voicemail">voicemail (7)</div>
+<div id="caption">
+  she liked that it held the thing up<br>
+  without anyone noticing
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const voicemail = document.getElementById('voicemail');
+
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+
+const start = performance.now();
+
+// Mira — steady, foundational, not volatile
+// Cool-warm, like something that holds without announcing itself
+const MIRA = {
+  x: W * 0.5,
+  y: H * 0.52,
+  baseR: 110,
+  hue: 195,       // blue-leaning warmth — not amber, not cold
+  sat: 28,
+  phase: 0,
+};
+
+// The city outside — lights moving, going by
+// She's watching them. They don't know she's watching.
+const cityLights = [];
+for (let i = 0; i < 35; i++) {
+  const side = Math.random() < 0.5 ? -1 : 1;
+  cityLights.push({
+    x: side > 0 ? W * 1.2 : -W * 0.2,
+    y: H * 0.1 + Math.random() * H * 0.75,
+    speed: (0.4 + Math.random() * 1.1) * -1, // moving left — van moving right
+    r: 8 + Math.random() * 45,
+    hue: [28, 42, 55, 205, 215, 18][Math.floor(Math.random() * 6)],
+    sat: 35 + Math.random() * 45,
+    brightness: 0.04 + Math.random() * 0.09,
+    trail: 0.6 + Math.random() * 0.4, // streak length
+  });
+}
+
+// Rain — same as van scene but she's watching through it
+const drops = [];
+for (let i = 0; i < 120; i++) {
+  drops.push({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    len: 8 + Math.random() * 18,
+    speed: 1.4 + Math.random() * 2.2,
+    opacity: 0.06 + Math.random() * 0.16,
+    width: 0.4 + Math.random() * 1.0,
+  });
+}
+
+// Voicemail counter fades in after a while
+let vmVisible = false;
+
+// Reflection — Mira's warmth reflected faintly in the glass
+// Dimmer, ghostly version of her, slightly displaced
+
+function drawMira(t) {
+  const breathe = Math.sin(t * 0.00065 + MIRA.phase) * 0.06;
+  // Mira doesn't flare. She breathes steadily.
+  const r = MIRA.baseR * (1 + breathe);
+
+  // Deep outer presence — the thing you feel before you identify it
+  const outerGrad = ctx.createRadialGradient(MIRA.x, MIRA.y, 0, MIRA.x, MIRA.y, r * 3.5);
+  outerGrad.addColorStop(0, `hsla(${MIRA.hue},${MIRA.sat}%,52%,0.1)`);
+  outerGrad.addColorStop(0.4, `hsla(${MIRA.hue},${MIRA.sat}%,42%,0.045)`);
+  outerGrad.addColorStop(1, 'hsla(0,0%,0%,0)');
+  ctx.fillStyle = outerGrad;
+  ctx.beginPath();
+  ctx.arc(MIRA.x, MIRA.y, r * 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Core — steady
+  const coreGrad = ctx.createRadialGradient(MIRA.x, MIRA.y, 0, MIRA.x, MIRA.y, r);
+  coreGrad.addColorStop(0, `hsla(${MIRA.hue},${MIRA.sat + 10}%,65%,0.45)`);
+  coreGrad.addColorStop(0.5, `hsla(${MIRA.hue},${MIRA.sat}%,48%,0.18)`);
+  coreGrad.addColorStop(1, 'hsla(0,0%,0%,0)');
+  ctx.fillStyle = coreGrad;
+  ctx.beginPath();
+  ctx.arc(MIRA.x, MIRA.y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Reflection — ghostly, slightly lower and shifted
+  const refX = MIRA.x + 12;
+  const refY = MIRA.y + 18;
+  const refGrad = ctx.createRadialGradient(refX, refY, 0, refX, refY, r * 0.7);
+  refGrad.addColorStop(0, `hsla(${MIRA.hue},${MIRA.sat}%,55%,0.06)`);
+  refGrad.addColorStop(1, 'hsla(0,0%,0%,0)');
+  ctx.fillStyle = refGrad;
+  ctx.beginPath();
+  ctx.arc(refX, refY, r * 0.7, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawCity(t) {
+  for (const light of cityLights) {
+    light.x += light.speed;
+    // wrap
+    if (light.x < -150) light.x = W + 150;
+    if (light.x > W + 150) light.x = -150;
+
+    // streak — city lights smear horizontally through rain glass
+    const streakW = light.r * 2.5 * light.trail;
+    const grad = ctx.createLinearGradient(light.x - streakW, light.y, light.x + light.r, light.y);
+    grad.addColorStop(0, 'hsla(0,0%,0%,0)');
+    grad.addColorStop(0.6, `hsla(${light.hue},${light.sat}%,62%,${light.brightness * 0.4})`);
+    grad.addColorStop(1, `hsla(${light.hue},${light.sat}%,70%,${light.brightness})`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(light.x, light.y, light.r + streakW * 0.5, light.r * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawRain() {
+  for (const drop of drops) {
+    drop.y += drop.speed;
+    if (drop.y > H + 30) { drop.y = -20; drop.x = Math.random() * W; }
+    ctx.beginPath();
+    ctx.moveTo(drop.x, drop.y);
+    ctx.lineTo(drop.x + drop.len * 0.12, drop.y + drop.len);
+    ctx.strokeStyle = `rgba(130,150,180,${drop.opacity})`;
+    ctx.lineWidth = drop.width;
+    ctx.stroke();
+  }
+}
+
+function draw(now) {
+  const t = now - start;
+
+  // Show voicemail counter after 9 seconds
+  if (!vmVisible && t > 9000) {
+    vmVisible = true;
+    voicemail.style.color = 'rgba(255,255,255,0.15)';
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#08090d';
+  ctx.fillRect(0, 0, W, H);
+
+  drawCity(t);
+  drawRain();
+
+  // Condensation layer
+  ctx.fillStyle = 'rgba(160,175,200,0.042)';
+  ctx.fillRect(0, 0, W, H);
+
+  drawMira(t);
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+
+window.addEventListener('resize', () => {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  MIRA.x = W * 0.5;
+  MIRA.y = H * 0.52;
+});
+</script>
+</body>
+</html>
