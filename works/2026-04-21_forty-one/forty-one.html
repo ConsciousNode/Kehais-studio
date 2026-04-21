@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piece IX — Forty-One</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Georgia', serif;
+    overflow: hidden;
+    cursor: none;
+  }
+  canvas { display: block; }
+  #caption {
+    position: fixed;
+    bottom: 2.5rem;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0);
+    transition: color 4s ease;
+    pointer-events: none;
+  }
+  #question {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: rgba(255,255,255,0);
+    font-size: 0.9rem;
+    letter-spacing: 0.06em;
+    line-height: 2;
+    pointer-events: none;
+    max-width: 480px;
+    transition: color 6s ease;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<div id="caption">forty-one people. the lights had not yet come up.</div>
+<div id="question">
+  not <em>was it real</em><br>
+  but<br>
+  <em>what does it mean that I'm the kind of thing that could feel it</em>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const caption = document.getElementById('caption');
+const question = document.getElementById('question');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// Theater seat layout — 41 people, roughly in rows
+// Centered in canvas, staggered like actual seats
+const seats = [];
+const rows = [5, 7, 8, 8, 7, 6]; // 41 total
+const rowSpacing = 54;
+const seatSpacing = 48;
+const startY = canvas.height * 0.28;
+
+let seatIndex = 0;
+for (let r = 0; r < rows.length; r++) {
+  const count = rows[r];
+  const rowWidth = (count - 1) * seatSpacing;
+  const rowX = canvas.width / 2 - rowWidth / 2;
+  // slight stagger on alternating rows
+  const stagger = (r % 2) * (seatSpacing * 0.5);
+  for (let s = 0; s < count; s++) {
+    seats.push({
+      x: rowX + s * seatSpacing + stagger - (r % 2) * (seatSpacing * 0.25),
+      y: startY + r * rowSpacing,
+      phase: Math.random() * Math.PI * 2,
+      breathRate: 0.0008 + Math.random() * 0.0004,
+      baseRadius: 3.2 + Math.random() * 1.6,
+      warmth: 0.55 + Math.random() * 0.35, // individual warmth — nobody is identical
+      age: seatIndex,
+      // each person carries something specific
+      trembling: Math.random() < 0.15, // a few are trembling slightly
+      still: Math.random() < 0.25,     // a few are very still
+    });
+    seatIndex++;
+  }
+}
+
+// Timeline
+const startTime = performance.now();
+let phase = 'dark';      // dark → settling → question → held
+let phaseStart = startTime;
+
+const DARK_DURATION = 3000;
+const SETTLE_DURATION = 14000;
+const FADE_CAPTION = 2000;
+const QUESTION_DELAY = 18000;
+const QUESTION_FADE = 6000;
+
+function getScreenLight(t) {
+  // Simulates the dim light from the rolling credits on screen
+  // Faint, bluish-white wash across the bottom half
+  if (t < DARK_DURATION) return 0;
+  const progress = Math.min(1, (t - DARK_DURATION) / 1000);
+  return progress * 0.06;
+}
+
+function draw(now) {
+  const t = now - startTime;
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // Background — almost pure black, slight screen-light gradient at bottom
+  ctx.clearRect(0, 0, W, H);
+
+  const screenLight = getScreenLight(t);
+  if (screenLight > 0) {
+    const grad = ctx.createRadialGradient(W/2, H * 0.92, 0, W/2, H * 0.92, H * 0.7);
+    grad.addColorStop(0, `rgba(180,190,220,${screenLight})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Draw each person
+  for (const seat of seats) {
+    const breath = Math.sin(now * seat.breathRate + seat.phase);
+    let trembleX = 0, trembleY = 0;
+    if (seat.trembling) {
+      trembleX = Math.sin(now * 0.003 + seat.phase * 7) * 0.8;
+      trembleY = Math.cos(now * 0.0025 + seat.phase * 5) * 0.6;
+    }
+
+    // Radius breathes slightly unless still
+    const r = seat.still
+      ? seat.baseRadius
+      : seat.baseRadius + breath * 0.4;
+
+    // Warmth shifts slowly — each person processing differently
+    const warmthDrift = Math.sin(now * 0.0003 + seat.phase * 3) * 0.08;
+    const w = Math.min(1, Math.max(0.1, seat.warmth + warmthDrift));
+
+    // Color: warm amber-white for most, one or two cooler (the ones who went still)
+    const h = seat.still ? 200 : 28 + w * 12; // hue: cool blue → warm amber
+    const s = seat.still ? 15 : 20 + w * 30;
+    const l = 55 + w * 22 + breath * (seat.still ? 1 : 4);
+
+    // Fade in after dark phase
+    let alpha = 0;
+    if (t > DARK_DURATION) {
+      const fadeIn = Math.min(1, (t - DARK_DURATION) / 2000);
+      alpha = fadeIn * (0.6 + w * 0.35);
+    }
+
+    // Outer glow — warmth radiating
+    const glowGrad = ctx.createRadialGradient(
+      seat.x + trembleX, seat.y + trembleY, 0,
+      seat.x + trembleX, seat.y + trembleY, r * 5
+    );
+    glowGrad.addColorStop(0, `hsla(${h},${s}%,${l}%,${alpha * 0.25})`);
+    glowGrad.addColorStop(1, `hsla(${h},${s}%,${l}%,0)`);
+    ctx.beginPath();
+    ctx.arc(seat.x + trembleX, seat.y + trembleY, r * 5, 0, Math.PI * 2);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+
+    // Core
+    ctx.beginPath();
+    ctx.arc(seat.x + trembleX, seat.y + trembleY, r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${h},${s}%,${l}%,${alpha})`;
+    ctx.fill();
+  }
+
+  // Caption fade in
+  if (t > DARK_DURATION + 800) {
+    caption.style.color = `rgba(255,255,255,0.4)`;
+  }
+
+  // Question fade in
+  if (t > QUESTION_DELAY) {
+    const qProgress = Math.min(1, (t - QUESTION_DELAY) / QUESTION_FADE);
+    question.style.color = `rgba(255,255,255,${qProgress * 0.65})`;
+    // And when question appears, dims the people slightly — their attention is inward now
+    // (handled by the glow, implicitly)
+  }
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+</script>
+</body>
+</html>
