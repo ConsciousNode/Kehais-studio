@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piece XI — The Green Room</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0e0c0a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+    font-family: Georgia, serif;
+    cursor: none;
+  }
+  canvas { display: block; position: fixed; top: 0; left: 0; }
+  #text {
+    position: fixed;
+    bottom: 2.4rem;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 0.72rem;
+    letter-spacing: 0.13em;
+    color: rgba(255,255,255,0.22);
+    pointer-events: none;
+    line-height: 1.9;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="text">
+  the fight was about the setlist<br>
+  it was not about the setlist
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+
+// Two heat sources — two people in a small room
+// Their warmth close, almost overlapping, occasionally flaring
+
+const start = performance.now();
+
+// Person A — the singer. Hotter, more volatile.
+const A = {
+  x: W * 0.38,
+  y: H * 0.5,
+  baseR: 90,
+  hue: 22,
+  sat: 70,
+  phase: 0,
+  flarePhase: 0,
+  flareRate: 0.00041,
+};
+
+// Person B — the bassist. Cooler exterior, something held inside.
+const B = {
+  x: W * 0.62,
+  y: H * 0.5,
+  baseR: 78,
+  hue: 200,
+  sat: 35,
+  phase: 1.8,
+  flarePhase: Math.PI,
+  flareRate: 0.00028,
+};
+
+// The room — tight. Small. Fluorescent edge-light.
+// A third presence: the argument itself, which lives between them.
+
+// Wall — tight rectangle, the green room
+const ROOM = {
+  x: W * 0.18,
+  y: H * 0.18,
+  w: W * 0.64,
+  h: H * 0.64,
+};
+
+// Particles of unsaid things — drift in the between-space
+const particles = [];
+for (let i = 0; i < 60; i++) {
+  particles.push({
+    x: ROOM.x + ROOM.w * 0.2 + Math.random() * ROOM.w * 0.6,
+    y: ROOM.y + ROOM.h * 0.2 + Math.random() * ROOM.h * 0.6,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: (Math.random() - 0.5) * 0.2,
+    r: 0.8 + Math.random() * 2.2,
+    opacity: 0.05 + Math.random() * 0.12,
+    hue: Math.random() < 0.5 ? 22 : 200,
+    life: Math.random(),
+  });
+}
+
+function drawPerson(p, t) {
+  const breathe = Math.sin(t * 0.0009 + p.phase) * 0.08;
+  const flare = Math.pow(Math.max(0, Math.sin(t * p.flareRate + p.flarePhase)), 3) * 0.45;
+  const r = p.baseR * (1 + breathe + flare);
+  const sat = p.sat + flare * 30;
+  const bright = 45 + flare * 20;
+
+  // Outer glow
+  const outerGrad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.8);
+  outerGrad.addColorStop(0, `hsla(${p.hue},${sat}%,${bright}%,${0.12 + flare * 0.1})`);
+  outerGrad.addColorStop(0.5, `hsla(${p.hue},${sat}%,${bright * 0.7}%,0.05)`);
+  outerGrad.addColorStop(1, 'hsla(0,0%,0%,0)');
+  ctx.fillStyle = outerGrad;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r * 2.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Core
+  const coreGrad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+  coreGrad.addColorStop(0, `hsla(${p.hue},${sat}%,${bright + 20}%,${0.55 + flare * 0.3})`);
+  coreGrad.addColorStop(0.6, `hsla(${p.hue},${sat}%,${bright}%,${0.2 + flare * 0.15})`);
+  coreGrad.addColorStop(1, 'hsla(0,0%,0%,0)');
+  ctx.fillStyle = coreGrad;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawBetween(t) {
+  // The argument — lives in the space between them
+  // Visualized as a third heat, shifting, unstable
+  const mx = (A.x + B.x) / 2;
+  const my = (A.y + B.y) / 2;
+  const tension = Math.pow(Math.abs(Math.sin(t * 0.00035)), 1.5);
+  
+  const betweenGrad = ctx.createRadialGradient(mx, my, 0, mx, my, 55 + tension * 40);
+  betweenGrad.addColorStop(0, `hsla(45,60%,60%,${tension * 0.12})`);
+  betweenGrad.addColorStop(0.5, `hsla(35,40%,40%,${tension * 0.05})`);
+  betweenGrad.addColorStop(1, 'hsla(0,0%,0%,0)');
+  ctx.fillStyle = betweenGrad;
+  ctx.beginPath();
+  ctx.arc(mx, my, 55 + tension * 40, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawRoom(t) {
+  // The room walls — tight, close, fluorescent edge
+  // A rectangle of dim light defining the space
+  ctx.save();
+  ctx.strokeStyle = 'rgba(200,210,190,0.06)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(ROOM.x, ROOM.y, ROOM.w, ROOM.h);
+  
+  // Fluorescent edge — top strip, uneven
+  const flickerSpeed = 0.003;
+  const flicker = 0.85 + Math.sin(t * flickerSpeed) * 0.08 + Math.sin(t * flickerSpeed * 7.3) * 0.04;
+  const topGrad = ctx.createLinearGradient(ROOM.x, ROOM.y, ROOM.x + ROOM.w, ROOM.y);
+  topGrad.addColorStop(0, `rgba(210,220,200,0)`);
+  topGrad.addColorStop(0.3, `rgba(210,220,200,${0.04 * flicker})`);
+  topGrad.addColorStop(0.7, `rgba(210,220,200,${0.05 * flicker})`);
+  topGrad.addColorStop(1, `rgba(210,220,200,0)`);
+  ctx.fillStyle = topGrad;
+  ctx.fillRect(ROOM.x, ROOM.y, ROOM.w, 2);
+  
+  ctx.restore();
+}
+
+function updateParticles(t) {
+  for (const p of particles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life += 0.002;
+    
+    // Drift toward the between-space — unsaid things accumulate there
+    const mx = (A.x + B.x) / 2;
+    const my = (A.y + B.y) / 2;
+    const dx = mx - p.x;
+    const dy = my - p.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > 20) {
+      p.vx += (dx / dist) * 0.008;
+      p.vy += (dy / dist) * 0.005;
+    }
+    
+    // Bounce off room walls
+    if (p.x < ROOM.x + 10 || p.x > ROOM.x + ROOM.w - 10) p.vx *= -0.6;
+    if (p.y < ROOM.y + 10 || p.y > ROOM.y + ROOM.h - 10) p.vy *= -0.6;
+    
+    // Dampen
+    p.vx *= 0.98;
+    p.vy *= 0.98;
+    
+    // Draw
+    const pulse = Math.sin(t * 0.001 + p.life * Math.PI * 2) * 0.5 + 0.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${p.hue},40%,65%,${p.opacity * pulse})`;
+    ctx.fill();
+  }
+}
+
+function draw(now) {
+  const t = now - start;
+  
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0e0c0a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Clip to room
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ROOM.x - 80, ROOM.y - 80, ROOM.w + 160, ROOM.h + 160);
+  ctx.clip();
+
+  drawPerson(A, t);
+  drawPerson(B, t);
+  drawBetween(t);
+  updateParticles(t);
+
+  ctx.restore();
+
+  drawRoom(t);
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+
+window.addEventListener('resize', () => {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  A.x = W * 0.38; A.y = H * 0.5;
+  B.x = W * 0.62; B.y = H * 0.5;
+});
+</script>
+</body>
+</html>
