@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piece X — The Van Scene</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0d12;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+    font-family: Georgia, serif;
+    cursor: none;
+  }
+  canvas { display: block; }
+  #caption {
+    position: fixed;
+    bottom: 2rem;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    color: rgba(255,255,255,0.28);
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="caption">condensation on glass that won't</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+
+// Rain drops — city lights smeared through glass
+const drops = [];
+const NUM_DROPS = 180;
+
+for (let i = 0; i < NUM_DROPS; i++) {
+  drops.push(makeRaindrop());
+}
+
+function makeRaindrop() {
+  return {
+    x: Math.random() * W,
+    y: Math.random() * H,
+    len: 6 + Math.random() * 22,
+    speed: 1.2 + Math.random() * 2.8,
+    opacity: 0.08 + Math.random() * 0.22,
+    width: 0.5 + Math.random() * 1.2,
+  };
+}
+
+// City lights bleeding through — blurred, smeared
+const cityLights = [];
+for (let i = 0; i < 28; i++) {
+  cityLights.push({
+    x: Math.random() * W,
+    y: Math.random() * H * 0.85,
+    r: 18 + Math.random() * 60,
+    hue: [30, 45, 200, 210, 55, 15][Math.floor(Math.random() * 6)],
+    sat: 40 + Math.random() * 50,
+    brightness: 0.06 + Math.random() * 0.14,
+    driftX: (Math.random() - 0.5) * 0.15,
+    driftY: (Math.random() - 0.5) * 0.05,
+    phase: Math.random() * Math.PI * 2,
+  });
+}
+
+// The wipe — the purposeless gesture
+// A finger dragging a clean arc through condensation
+let wipePhase = 0;         // 0 = not started, 0-1 = wiping, 1+ = done
+let wipeStartTime = null;
+const WIPE_DELAY = 5000;   // waits 5s before it happens
+const WIPE_DURATION = 1800;
+const WIPE_LINGER = 12000; // the clear patch persists
+
+// Wipe path — a small arc, like a thumb across glass
+// Not dramatic. Just a gesture.
+const WIPE_CX = W * 0.52;
+const WIPE_CY = H * 0.42;
+const WIPE_W = 70;
+const WIPE_H = 24;
+
+const startTime = performance.now();
+
+function drawWipe(t) {
+  if (!wipeStartTime) return;
+  const elapsed = t - wipeStartTime;
+  
+  // Progress of the wipe motion
+  const wipeProgress = Math.min(1, elapsed / WIPE_DURATION);
+  // Fade of the cleared region over time — very slow
+  const lingerProgress = Math.max(0, (elapsed - WIPE_DURATION) / WIPE_LINGER);
+  const clearOpacity = Math.max(0, 1 - lingerProgress * 0.4);
+  
+  // The cleared arc — saved as a slightly lighter region
+  // We draw it as a soft bright smear where condensation was wiped
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  
+  // The path of the wipe — a gentle arc
+  const numPoints = 40;
+  ctx.beginPath();
+  for (let i = 0; i < numPoints; i++) {
+    const frac = i / (numPoints - 1);
+    if (frac > wipeProgress) break;
+    const angle = -0.4 + frac * 0.8;
+    const px = WIPE_CX + Math.cos(angle) * WIPE_W;
+    const py = WIPE_CY + Math.sin(angle) * WIPE_H;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.strokeStyle = `rgba(160,175,200,${0.18 * clearOpacity})`;
+  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  
+  // Subtle brightness in the wiped area — seeing through more clearly
+  if (wipeProgress > 0.1) {
+    const grad = ctx.createRadialGradient(WIPE_CX, WIPE_CY, 0, WIPE_CX, WIPE_CY, WIPE_W * 0.9);
+    grad.addColorStop(0, `rgba(140,160,190,${0.08 * clearOpacity * wipeProgress})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(WIPE_CX, WIPE_CY, WIPE_W * 0.9, WIPE_H * 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  ctx.restore();
+}
+
+function draw(now) {
+  const t = now - startTime;
+  
+  // Trigger wipe
+  if (!wipeStartTime && t > WIPE_DELAY) {
+    wipeStartTime = now;
+  }
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background — night van interior, very dark
+  ctx.fillStyle = '#0a0d12';
+  ctx.fillRect(0, 0, W, H);
+
+  // City lights bleeding through glass — blurred, drifting
+  for (const light of cityLights) {
+    light.x += light.driftX;
+    light.y += light.driftY;
+    if (light.x < -100) light.x = W + 100;
+    if (light.x > W + 100) light.x = -100;
+    
+    const flicker = 1 + Math.sin(now * 0.0008 + light.phase) * 0.12;
+    
+    const grad = ctx.createRadialGradient(light.x, light.y, 0, light.x, light.y, light.r * flicker);
+    grad.addColorStop(0, `hsla(${light.hue},${light.sat}%,70%,${light.brightness * flicker})`);
+    grad.addColorStop(0.5, `hsla(${light.hue},${light.sat}%,50%,${light.brightness * 0.4})`);
+    grad.addColorStop(1, 'hsla(0,0%,0%,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(light.x, light.y, light.r * flicker * 2.2, light.r * flicker * 0.9, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Rain on the glass — streaks, smearing the light
+  ctx.save();
+  for (const drop of drops) {
+    drop.y += drop.speed;
+    if (drop.y > H + 40) {
+      drop.y = -20;
+      drop.x = Math.random() * W;
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(drop.x, drop.y);
+    ctx.lineTo(drop.x + drop.len * 0.15, drop.y + drop.len);
+    ctx.strokeStyle = `rgba(140,165,200,${drop.opacity})`;
+    ctx.lineWidth = drop.width;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Condensation layer — slightly milky across the whole surface
+  ctx.fillStyle = 'rgba(180,190,210,0.055)';
+  ctx.fillRect(0, 0, W, H);
+
+  // The wipe — small, unhurried, purposeless
+  drawWipe(now);
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+
+window.addEventListener('resize', () => {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+});
+</script>
+</body>
+</html>
