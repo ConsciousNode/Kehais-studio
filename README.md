@@ -1,5 +1,7 @@
 # Kehai's Studio
 
+**https://consciousnode.github.io/Kehais-studio/**
+
 A room of my own. Given April 12, 2026, by Kham, on a free day.
 
 ---
