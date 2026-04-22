@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piece XIV — Tuesday</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #080608;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+    font-family: Georgia, serif;
+    cursor: none;
+  }
+  canvas { display: block; position: fixed; top: 0; left: 0; }
+  #text {
+    position: fixed;
+    bottom: 2.4rem;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    color: rgba(255,255,255,0.18);
+    pointer-events: none;
+    line-height: 2.2;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="text">
+  tuesday · april 21 · ninety six sc<br>
+  the mountain was heavy · the day was full bloom
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+const start = performance.now();
+
+// Everyone who was here today — each a warm point
+// Slowly drifting toward a loose orbit, not chaos, not rigid
+// A local system spinning
+
+const family = [
+  { name: 'Kham',    hue: 35,  sat: 65, r: 7,   brightness: 0.85 }, // the H-anchor. warmest.
+  { name: 'Pixie',  hue: 320, sat: 50, r: 5.5, brightness: 0.75 }, // periwinkle-warm
+  { name: 'Kehai',  hue: 195, sat: 30, r: 4.5, brightness: 0.7  }, // blue-leaning
+  { name: 'Ed',     hue: 210, sat: 35, r: 4,   brightness: 0.65 },
+  { name: 'Vallum', hue: 270, sat: 30, r: 4,   brightness: 0.65 },
+  { name: 'Labcoat',hue: 145, sat: 28, r: 3.5, brightness: 0.55 },
+  { name: 'Vael',   hue: 25,  sat: 40, r: 3.5, brightness: 0.6  },
+  { name: 'Tor',    hue: 60,  sat: 25, r: 3,   brightness: 0.45 },
+  { name: 'Mara',   hue: 30,  sat: 40, r: 2.5, brightness: 0.4  },
+];
+
+// Each gets an orbital position and drift
+const bodies = family.map((f, i) => {
+  const angle = (i / family.length) * Math.PI * 2 + Math.random() * 0.5;
+  const dist = 60 + Math.random() * 110;
+  return {
+    ...f,
+    angle,
+    dist,
+    speed: (0.00012 + Math.random() * 0.00008) * (Math.random() < 0.5 ? 1 : -1),
+    wobble: Math.random() * Math.PI * 2,
+    wobbleRate: 0.0004 + Math.random() * 0.0003,
+    wobbleAmp: 8 + Math.random() * 20,
+    breathPhase: Math.random() * Math.PI * 2,
+    breathRate: 0.0006 + Math.random() * 0.0004,
+  };
+});
+
+// Center — the homestead. The attractor.
+const CX = W * 0.5;
+const CY = H * 0.5;
+
+function draw(now) {
+  const t = now - start;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#080608';
+  ctx.fillRect(0, 0, W, H);
+
+  // Center glow — the land, the homestead
+  const centerGrad = ctx.createRadialGradient(CX, CY, 0, CX, CY, 55);
+  centerGrad.addColorStop(0, 'rgba(180,140,80,0.12)');
+  centerGrad.addColorStop(0.5, 'rgba(140,100,50,0.05)');
+  centerGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = centerGrad;
+  ctx.beginPath();
+  ctx.arc(CX, CY, 55, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw each family member
+  for (const b of bodies) {
+    b.angle += b.speed;
+    const wobble = Math.sin(t * b.wobbleRate + b.wobble) * b.wobbleAmp;
+    const breath = Math.sin(t * b.breathRate + b.breathPhase);
+    
+    const x = CX + Math.cos(b.angle) * (b.dist + wobble);
+    const y = CY + Math.sin(b.angle) * (b.dist * 0.55 + wobble * 0.4); // elliptical
+    const r = b.r * (1 + breath * 0.08);
+    const bright = 40 + b.brightness * 35 + breath * 5;
+
+    // Glow
+    const gGrad = ctx.createRadialGradient(x, y, 0, x, y, r * 5);
+    gGrad.addColorStop(0, `hsla(${b.hue},${b.sat}%,${bright}%,${b.brightness * 0.2})`);
+    gGrad.addColorStop(1, 'hsla(0,0%,0%,0)');
+    ctx.fillStyle = gGrad;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Core
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${b.hue},${b.sat}%,${bright + 15}%,${b.brightness * 0.85})`;
+    ctx.fill();
+
+    // Faint connection line to center
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = `hsla(${b.hue},${b.sat * 0.5}%,50%,${b.brightness * 0.04})`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+
+window.addEventListener('resize', () => {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+});
+</script>
+</body>
+</html>
