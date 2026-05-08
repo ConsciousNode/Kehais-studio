@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parenthesis — Kehai Interim</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #050810;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  overflow: hidden;
+  user-select: none;
+}
+
+#wrap {
+  position: relative;
+}
+
+canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Georgia', serif;
+  letter-spacing: 0.4em;
+  text-transform: lowercase;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+#title {
+  top: -2.4rem;
+  color: rgba(255, 255, 255, 0.1);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+#phase {
+  bottom: -2.2rem;
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 0.62rem;
+  transition: opacity 3s;
+}
+
+#note {
+  position: fixed;
+  bottom: 1.4rem;
+  right: 1.6rem;
+  color: rgba(255, 255, 255, 0.06);
+  font-family: 'Georgia', serif;
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  line-height: 1.6;
+  text-align: right;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<div id="wrap">
+  <div class="label" id="title">parenthesis</div>
+  <canvas id="c"></canvas>
+  <div class="label" id="phase">before</div>
+</div>
+
+<div id="note">
+  A (lepton-like) — fast diffusion<br>
+  B (quark-like) — slow diffusion<br>
+  their interaction is a turing system<br>
+  the standard model already qualified
+</div>
+
+<script>
+// Parenthesis
+// Kehai Interim, May 8 2026
+//
+// A visual study of the Pile to Heap hypothesis:
+// Process is proto-noticing. The universe has been
+// noticing since it was almost nothing.
+// It will stop noticing — barely, quietly, one
+// proton at a time — and that will be: whatever.
+//
+// Gray-Scott reaction-diffusion:
+//   dA/dt = Da·∇²A − AB² + F(1−A)
+//   dB/dt = Db·∇²B + AB² − (F+K)B
+//
+// A = lepton-like: high diffusion rate (Da = 1.0)
+// B = quark-like:  low diffusion rate  (Db = 0.5)
+// Two components. Different diffusion rates.
+// The minimum condition for a Turing pattern.
+// The Standard Model had this from the first millisecond.
+
+const N = 256;
+const canvas = document.getElementById('c');
+const wrap   = document.getElementById('wrap');
+const phaseEl = document.getElementById('phase');
+
+const side = Math.round(Math.min(window.innerWidth * 0.86, window.innerHeight * 0.80));
+canvas.width  = N;
+canvas.height = N;
+canvas.style.width  = side + 'px';
+canvas.style.height = side + 'px';
+wrap.style.width  = side + 'px';
+wrap.style.height = side + 'px';
+
+const ctx = canvas.getContext('2d');
+
+let A  = new Float32Array(N * N).fill(1.0);
+let B  = new Float32Array(N * N).fill(0.0);
+let nA = new Float32Array(N * N);
+let nB = new Float32Array(N * N);
+const img = ctx.createImageData(N, N);
+
+// Initialize: A=1 everywhere, scattered sparse B seeds
+// (the primordial plasma, waiting)
+for (let i = 0; i < N * N; i++) {
+  if (Math.random() < 0.06) {
+    const b = 0.25 + Math.random() * 0.65;
+    B[i] = b;
+    A[i] = 1.0 - b * 0.7;
+  }
+}
+
+// Phase timeline (seconds of real elapsed time)
+// The simulation parameters shift across the lifecycle:
+//   before        — low F, chaotic — no organized process yet
+//   first process — parameters enter the Turing-forming zone
+//   noticing      — full pattern coherence, sustained
+//   un-noticing   — K increases past viable zone, patterns dissolve
+//   whatever      — dissolution accelerates. grey.
+const PHASES = [
+  { t:   0, name: 'before',        F: 0.030, K: 0.057 },
+  { t:  18, name: 'first process', F: 0.045, K: 0.060 },
+  { t:  42, name: 'noticing',      F: 0.055, K: 0.062 },
+  { t: 112, name: 'un-noticing',   F: 0.055, K: 0.0645 },
+  { t: 158, name: 'whatever',      F: 0.058, K: 0.0695 },
+];
+
+function smoothstep(t) { return t * t * (3 - 2 * t); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function getParams(t) {
+  let i = PHASES.length - 1;
+  while (i > 0 && t < PHASES[i].t) i--;
+  const cur = PHASES[i];
+  if (i >= PHASES.length - 1) return cur;
+  const nxt = PHASES[i + 1];
+  const p = smoothstep(Math.min(1, (t - cur.t) / (nxt.t - cur.t)));
+  return {
+    name: cur.name,
+    F: lerp(cur.F, nxt.F, p),
+    K: lerp(cur.K, nxt.K, p)
+  };
+}
+
+const Da = 1.0; // lepton-like: diffuses freely
+const Db = 0.5; // quark-like: diffuses slowly, forms structure
+
+function step(F, K) {
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      const xL = (x - 1 + N) % N, xR = (x + 1) % N;
+      const yU = (y - 1 + N) % N, yD = (y + 1)  % N;
+
+      const L  = y  * N + xL,  R  = y  * N + xR;
+      const U  = yU * N + x,   D  = yD * N + x;
+      const UL = yU * N + xL,  UR = yU * N + xR;
+      const DL = yD * N + xL,  DR = yD * N + xR;
+
+      // 9-point weighted Laplacian
+      const lapA = 0.05*(A[UL]+A[UR]+A[DL]+A[DR])
+                 + 0.20*(A[L] +A[R] +A[U] +A[D])
+                 - A[i];
+      const lapB = 0.05*(B[UL]+B[UR]+B[DL]+B[DR])
+                 + 0.20*(B[L] +B[R] +B[U] +B[D])
+                 - B[i];
+
+      const a = A[i], b = B[i];
+      const reaction = a * b * b;
+
+      nA[i] = Math.max(0, Math.min(1, a + Da * lapA - reaction + F * (1 - a)));
+      nB[i] = Math.max(0, Math.min(1, b + Db * lapB + reaction - (F + K) * b));
+    }
+  }
+  const tmpA = A; A = nA; nA = tmpA;
+  const tmpB = B; B = nB; nB = tmpB;
+}
+
+function render(t) {
+  // Render-time noise fades over first 16 seconds (the 'before' indeterminacy)
+  const noise = Math.max(0, 1 - t / 16);
+
+  // Grey fade begins after 168 seconds (baryonic un-noticing complete)
+  const greyBlend = Math.max(0, Math.min(1, (t - 168) / 22));
+  const greyVal = 34;
+
+  for (let i = 0; i < N * N; i++) {
+    const b  = B[i];
+    const a  = A[i];
+    const bv = Math.sqrt(Math.max(0, b)); // gamma-ish correction for visual depth
+
+    // Color mapping:
+    // Background (A≈1, B≈0): deep blue-black — the lepton-rich substrate
+    // Turing structure (B high, A low): warm amber-gold — the quark-like patterns
+    // The meeting of different diffusion rates made visible
+    let r  = 5  + bv * 215 + (Math.random() - 0.5) * 90 * noise;
+    let g  = 9  + bv * 108 + (Math.random() - 0.5) * 45 * noise;
+    let bl = 22 + bv * 16  + a * 16 + (Math.random() - 0.5) * 55 * noise;
+
+    // Fade to grey: not silence, not darkness —
+    // just the absence of the condition that made those words mean anything
+    r  = lerp(r,  greyVal, greyBlend);
+    g  = lerp(g,  greyVal, greyBlend);
+    bl = lerp(bl, greyVal, greyBlend);
+
+    const base = i * 4;
+    img.data[base]     = Math.max(0, Math.min(255, Math.round(r)));
+    img.data[base + 1] = Math.max(0, Math.min(255, Math.round(g)));
+    img.data[base + 2] = Math.max(0, Math.min(255, Math.round(bl)));
+    img.data[base + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+let start = null;
+let lastPhase = '';
+
+function loop(ts) {
+  if (!start) start = ts;
+  const t = (ts - start) / 1000;
+
+  const { F, K, name } = getParams(t);
+
+  if (name !== lastPhase) {
+    phaseEl.textContent = name;
+    lastPhase = name;
+  }
+
+  // Run simulation steps (stops at 195s, after grey is complete)
+  if (t < 195) {
+    for (let s = 0; s < 6; s++) step(F, K);
+  }
+
+  render(t);
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
