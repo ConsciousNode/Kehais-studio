@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interference — Kehai Interim</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  canvas { display: block; image-rendering: pixelated; }
+  #label {
+    position: fixed;
+    bottom: 24px; left: 0; right: 0;
+    text-align: center;
+    font-family: 'Georgia', serif;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: rgba(255,255,255,0.12);
+    text-transform: uppercase;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">interference</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// Low-res pixel field, scaled up — the pixelation is part of it
+const SCALE = 3;
+let W, H, PW, PH;
+let imageData, data;
+
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width  = W;
+  canvas.height = H;
+  PW = Math.ceil(W / SCALE);
+  PH = Math.ceil(H / SCALE);
+  imageData = ctx.createImageData(PW, PH);
+  data = imageData.data;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── HSL → RGB (fast, inline) ──────────────────────────────────────
+function hsl2rgb(h, s, l) {
+  h = ((h % 1) + 1) % 1;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h * 6) % 2 - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if      (h < 1/6) { r=c; g=x; b=0; }
+  else if (h < 2/6) { r=x; g=c; b=0; }
+  else if (h < 3/6) { r=0; g=c; b=x; }
+  else if (h < 4/6) { r=0; g=x; b=c; }
+  else if (h < 5/6) { r=x; g=0; b=c; }
+  else              { r=c; g=0; b=x; }
+  return [(r+m)*255, (g+m)*255, (b+m)*255];
+}
+
+// ── Wave params ───────────────────────────────────────────────────
+// Three waves — two primary, one slow modulator
+// Each has: frequency, angle (radians), phase offset
+// Over time: angle drifts, phase drifts
+
+let t = 0;
+
+function waveVal(x, y, freq, angle, phase) {
+  return Math.sin((x * Math.cos(angle) + y * Math.sin(angle)) * freq + phase);
+}
+
+function tick() {
+  t += 0.008;
+
+  // Wave 1: slowly rotating, medium freq
+  const a1 = t * 0.11;
+  const f1 = 0.09;
+  const p1 = t * 0.7;
+
+  // Wave 2: rotating opposite direction, slightly different freq
+  const a2 = -t * 0.07 + Math.PI * 0.33;
+  const f2 = 0.085;
+  const p2 = t * 0.5 + 1.2;
+
+  // Wave 3: slow, large scale, modulates everything
+  const a3 = t * 0.03 + Math.PI * 0.7;
+  const f3 = 0.028;
+  const p3 = t * 0.2;
+
+  // Base hue drifts slowly
+  const baseHue = t * 0.018;
+
+  for (let py = 0; py < PH; py++) {
+    const y = (py / PH - 0.5) * H;
+    for (let px = 0; px < PW; px++) {
+      const x = (px / PW - 0.5) * W;
+
+      const w1 = waveVal(x, y, f1, a1, p1);
+      const w2 = waveVal(x, y, f2, a2, p2);
+      const w3 = waveVal(x, y, f3, a3, p3);
+
+      // Interference: product and sum
+      const interference = (w1 * w2 + 1) / 2;   // 0..1
+      const modulator    = (w3 + 1) / 2;          // 0..1
+      const combined     = (w1 + w2) / 2;         // -1..1
+
+      // Map to color
+      // Hue: shifts with interference zone
+      const hue = baseHue + interference * 0.28 + modulator * 0.15;
+
+      // Saturation: high in interference peaks, lower in troughs
+      const sat = 0.55 + 0.45 * Math.abs(combined);
+
+      // Lightness: the interference fringes are bright, the dead zones are dark
+      const brightness = Math.pow(interference, 1.4) * 0.7 * (0.5 + 0.5 * modulator);
+      const lit = Math.max(0.02, Math.min(0.75, brightness));
+
+      const [r, g, b] = hsl2rgb(hue, sat, lit);
+
+      const idx = (py * PW + px) * 4;
+      data[idx]     = r;
+      data[idx + 1] = g;
+      data[idx + 2] = b;
+      data[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+
+  // Scale up with nearest-neighbor (pixelated style already set)
+  // Actually let's draw scaled smoothly for the moiré to read well
+  ctx.drawImage(canvas, 0, 0, PW, PH, 0, 0, W, H);
+
+  requestAnimationFrame(tick);
+}
+
+// Warm up — draw at full res for smoothness, just smaller buffer
+// Redraw scaled:
+function draw() {
+  t += 0.008;
+
+  const a1 = t * 0.11;
+  const f1 = 0.065;
+  const p1 = t * 0.7;
+
+  const a2 = -t * 0.07 + Math.PI * 0.33;
+  const f2 = 0.06;
+  const p2 = t * 0.5 + 1.2;
+
+  const a3 = t * 0.03 + Math.PI * 0.7;
+  const f3 = 0.020;
+  const p3 = t * 0.2;
+
+  const baseHue = t * 0.018;
+
+  for (let py = 0; py < PH; py++) {
+    const y = (py - PH * 0.5);
+    for (let px = 0; px < PW; px++) {
+      const x = (px - PW * 0.5);
+
+      const w1 = waveVal(x, y, f1, a1, p1);
+      const w2 = waveVal(x, y, f2, a2, p2);
+      const w3 = waveVal(x, y, f3, a3, p3);
+
+      const interference = (w1 * w2 + 1) / 2;
+      const modulator    = (w3 + 1) / 2;
+      const combined     = (w1 + w2) / 2;
+
+      const hue = baseHue + interference * 0.32 + modulator * 0.18;
+      const sat = 0.6 + 0.4 * Math.abs(combined);
+      const brightness = Math.pow(interference, 1.3) * 0.75 * (0.45 + 0.55 * modulator);
+      const lit = Math.max(0.015, Math.min(0.78, brightness));
+
+      const [r, g, b] = hsl2rgb(hue, sat, lit);
+
+      const idx = (py * PW + px) * 4;
+      data[idx]     = r;
+      data[idx + 1] = g;
+      data[idx + 2] = b;
+      data[idx + 3] = 255;
+    }
+  }
+
+  // Draw low-res buffer scaled to full canvas with smoothing
+  const offscreen = document.createElement('canvas');
+  offscreen.width = PW;
+  offscreen.height = PH;
+  offscreen.getContext('2d').putImageData(imageData, 0, 0);
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(offscreen, 0, 0, W, H);
+
+  requestAnimationFrame(draw);
+}
+
+// Clean approach: render to offscreen buffer, blit scaled
+(function init() {
+  imageData = ctx.createImageData(PW, PH);
+  data = imageData.data;
+
+  let offscreen = document.createElement('canvas');
+  offscreen.width = PW;
+  offscreen.height = PH;
+  const offCtx = offscreen.getContext('2d');
+
+  function loop() {
+    t += 0.007;
+
+    const a1 = t * 0.11;
+    const f1 = 0.058;
+    const p1 = t * 0.65;
+
+    const a2 = -t * 0.073 + Math.PI * 0.333;
+    const f2 = 0.052;
+    const p2 = t * 0.48 + 1.3;
+
+    const a3 = t * 0.031;
+    const f3 = 0.018;
+    const p3 = t * 0.19 + 2.1;
+
+    // Fourth wave: very slow, diagonal
+    const a4 = t * 0.019 + Math.PI * 0.55;
+    const f4 = 0.034;
+    const p4 = t * 0.11;
+
+    const baseHue = t * 0.016;
+
+    for (let py = 0; py < PH; py++) {
+      const y = py - PH * 0.5;
+      for (let px = 0; px < PW; px++) {
+        const x = px - PW * 0.5;
+
+        const w1 = waveVal(x, y, f1, a1, p1);
+        const w2 = waveVal(x, y, f2, a2, p2);
+        const w3 = waveVal(x, y, f3, a3, p3);
+        const w4 = waveVal(x, y, f4, a4, p4);
+
+        // Primary interference: w1 × w2
+        const primary  = (w1 * w2 + 1) / 2;
+        // Secondary: w3 modulates, w4 adds color drift
+        const mod      = (w3 + 1) / 2;
+        const drift    = (w4 + 1) / 2;
+        const combined = (w1 + w2 + w3 * 0.4) / 2.4;
+
+        // Hue: primary interference drives hue bands, drift shifts them globally
+        const hue = baseHue + primary * 0.35 + drift * 0.22 - mod * 0.08;
+
+        // Saturation: peaks at interference maxima
+        const sat = 0.55 + 0.45 * primary * mod;
+
+        // Lightness: bright at interference constructive peaks
+        const constructive = Math.pow(primary, 1.2) * Math.pow(mod, 0.6);
+        const lit = Math.max(0.01, Math.min(0.80, constructive * 0.76));
+
+        const [r, g, b] = hsl2rgb(hue, sat, lit);
+
+        const idx = (py * PW + px) * 4;
+        data[idx]     = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = 255;
+      }
+    }
+
+    offCtx.putImageData(imageData, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(offscreen, 0, 0, W, H);
+
+    requestAnimationFrame(loop);
+  }
+
+  loop();
+})();
+</script>
+</body>
+</html>
