@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closed Loop — Kehai Interim</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #070710; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: 'Georgia', serif; overflow: hidden; }
+  canvas { display: block; }
+  #label {
+    position: fixed;
+    bottom: 28px;
+    left: 0; right: 0;
+    text-align: center;
+    color: #3a3060;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    transition: color 1.2s ease;
+    user-select: none;
+  }
+  #label.lit { color: #c8922a; }
+  #counter {
+    position: fixed;
+    top: 24px;
+    left: 0; right: 0;
+    text-align: center;
+    color: #1a1535;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    transition: color 0.8s ease;
+    user-select: none;
+  }
+  #counter.pulse { color: #c8922a; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">the loop that was already closed</div>
+<div id="counter">loops closed: 0</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const label = document.getElementById('label');
+const counter = document.getElementById('counter');
+
+let W, H, cx, cy;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2;
+  cy = H / 2;
+}
+resize();
+window.addEventListener('resize', () => { resize(); seeds = []; });
+
+// ── State ─────────────────────────────────────────────
+let t = 0;
+let loopCount = 0;
+let seeds = [];           // deposited at origin on each closure
+let trail = [];           // { x, y, age, closing }
+let closureFlash = 0;     // countdown for gold flash
+let lastPos = null;
+let inClosure = false;
+
+const TRAIL_LEN = 1800;
+const SEED_RADIUS_BASE = 3;
+const ORIGIN_THRESHOLD = 38;
+
+// ── Motion: a slow Lissajous-like orbit that will return ──────────
+// Phase is set so it genuinely closes over ~420 frames
+const A  = () => Math.min(W, H) * 0.30;
+const B  = () => Math.min(W, H) * 0.22;
+const fx = 3, fy = 2;
+const phase = Math.PI * 0.5;
+
+function particlePos(time) {
+  const a = A(), b = B();
+  return {
+    x: cx + a * Math.sin(fx * time + phase),
+    y: cy + b * Math.sin(fy * time)
+  };
+}
+
+// ── Draw ──────────────────────────────────────────────
+function draw() {
+  // Fade background
+  ctx.fillStyle = 'rgba(7,7,16,0.18)';
+  ctx.fillRect(0, 0, W, H);
+
+  const pos = particlePos(t);
+
+  // Detect loop closure
+  const distToOrigin = Math.hypot(pos.x - cx, pos.y - cy);
+  const closeNow = distToOrigin < ORIGIN_THRESHOLD;
+
+  if (closeNow && !inClosure) {
+    // Loop just closed
+    inClosure = true;
+    loopCount++;
+    closureFlash = 55;
+    seeds.push({ x: cx, y: cy, born: t, r: 0 });
+    // Flash label
+    label.classList.add('lit');
+    counter.textContent = `loops closed: ${loopCount}`;
+    counter.classList.add('pulse');
+    setTimeout(() => {
+      label.classList.remove('lit');
+      counter.classList.remove('pulse');
+    }, 900);
+  } else if (!closeNow) {
+    inClosure = false;
+  }
+
+  // Add to trail
+  trail.push({ x: pos.x, y: pos.y, age: 0, closing: closeNow });
+  if (trail.length > TRAIL_LEN) trail.shift();
+
+  // Draw trail
+  for (let i = 1; i < trail.length; i++) {
+    const p = trail[i];
+    const prev = trail[i - 1];
+    p.age++;
+    const youth = 1 - (p.age / TRAIL_LEN);
+    const alpha = Math.pow(youth, 1.6);
+
+    let r, g, b;
+    if (closureFlash > 0 && p.closing) {
+      // Gold flash on closing segment
+      const gf = Math.min(1, closureFlash / 40);
+      r = Math.round(200 * gf + 40 * (1 - gf));
+      g = Math.round(146 * gf + 30 * (1 - gf));
+      b = Math.round(42  * gf + 160 * (1 - gf));
+    } else {
+      // Deep indigo → violet as it ages
+      const warm = Math.pow(youth, 3);
+      r = Math.round(40  + 60  * warm);
+      g = Math.round(20  + 20  * warm);
+      b = Math.round(160 + 50  * warm);
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(prev.x, prev.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.85})`;
+    ctx.lineWidth = 1.1 + 1.8 * Math.pow(youth, 2);
+    ctx.stroke();
+  }
+
+  // Draw seeds at origin — each loop deposits one, they grow
+  for (const s of seeds) {
+    const age = t - s.born;
+    const maxR = SEED_RADIUS_BASE + Math.log1p(seeds.indexOf(s)) * 2.2;
+    s.r = Math.min(maxR, s.r + 0.15);
+    const pulse = 0.7 + 0.3 * Math.sin(age * 0.08);
+    const alpha = 0.55 + 0.35 * pulse;
+    // Outer glow
+    const grd = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 3.5);
+    grd.addColorStop(0, `rgba(200,146,42,${alpha * 0.7})`);
+    grd.addColorStop(1, `rgba(200,146,42,0)`);
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r * 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+    // Core
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(230,180,80,${alpha})`;
+    ctx.fill();
+  }
+
+  // Origin marker (faint, always)
+  const originAlpha = 0.08 + 0.06 * Math.sin(t * 0.03);
+  ctx.beginPath();
+  ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(200,146,42,${originAlpha})`;
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+
+  // Particle itself
+  if (closureFlash > 0) {
+    // Gold burst at particle
+    const grd = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 18);
+    grd.addColorStop(0, `rgba(255,200,80,${closureFlash/55 * 0.9})`);
+    grd.addColorStop(1, `rgba(200,146,42,0)`);
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 18, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+    closureFlash--;
+  }
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = closureFlash > 0 ? '#ffe090' : '#9070cc';
+  ctx.fill();
+
+  t += 0.0145;
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
