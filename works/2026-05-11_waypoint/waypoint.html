@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>waypoint</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #060809; overflow: hidden; }
+canvas#main { display: block; position: fixed; top: 0; left: 0; }
+#ui { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+#title {
+  position: absolute; top: 18px; left: 22px;
+  color: #00e5ff; font: 700 11px/1 monospace;
+  letter-spacing: 0.18em; opacity: 0.65;
+}
+#status {
+  position: absolute; top: 18px; right: 22px;
+  color: #4a6070; font: 10px/1 monospace;
+  letter-spacing: 0.1em;
+}
+#epigraph {
+  position: absolute; bottom: 20px; left: 22px;
+  color: #1e3040; font: italic 9px/1.6 monospace;
+}
+#grid {
+  position: absolute; bottom: 14px; right: 14px;
+  display: flex; flex-direction: row; flex-wrap: wrap-reverse;
+  gap: 3px; max-width: 420px; justify-content: flex-end;
+  align-items: flex-end;
+}
+.fcell {
+  position: relative; width: 80px; height: 60px;
+  border: 1px solid #1a2e3d; overflow: hidden;
+  opacity: 0; transition: opacity 0.4s ease;
+}
+.fcell.visible { opacity: 1; }
+.fcell canvas { width: 80px; height: 60px; display: block; }
+.flabel {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(6,8,9,0.85);
+  color: #00e5ff; font: 7px/1 monospace;
+  padding: 2px 4px; letter-spacing: 0.05em;
+}
+</style>
+</head>
+<body>
+<canvas id="main"></canvas>
+<div id="ui">
+  <div id="title">WAYPOINT</div>
+  <div id="status">awaiting first stop</div>
+  <div id="epigraph">
+    the rover would need to move slowly.<br>
+    there would be a lot to stop for.
+  </div>
+  <div id="grid"></div>
+</div>
+<script>
+// ── Canvas setup ──────────────────────────────────────────────────────────────
+const canvas = document.getElementById('main');
+const ctx    = canvas.getContext('2d');
+let W = 0, H = 0;
+
+// ── Noise ─────────────────────────────────────────────────────────────────────
+function hash(n) {
+  let h = n | 0;
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
+}
+function noise2(x, y, seed) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = yf * yf * (3 - 2 * yf);
+  const r = (nx, ny) => hash(nx * 7919 + ny * 6271 + (seed|0) * 997);
+  const a = r(xi,yi), b = r(xi+1,yi), c = r(xi,yi+1), d = r(xi+1,yi+1);
+  return a + (b-a)*u + (c-a)*v + (a-b-c+d)*u*v;
+}
+function fbm(x, y, octs, seed) {
+  let v = 0, amp = 0.5, freq = 1, max = 0;
+  for (let i = 0; i < octs; i++) {
+    v += noise2(x * freq, y * freq, seed + i * 113) * amp;
+    max += amp; amp *= 0.5; freq *= 2.1;
+  }
+  return v / max;
+}
+
+// ── Landscape ─────────────────────────────────────────────────────────────────
+const SEED = Math.random() * 9999 | 0;
+let landscapeData = null;
+let features = [];
+
+function generateLandscape() {
+  const img = ctx.createImageData(W, H);
+  const d   = img.data;
+  const sc  = 0.0032;
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const nx = x * sc, ny = y * sc;
+      const base   = fbm(nx,       ny,       5, SEED);
+      const detail = fbm(nx * 2.8, ny * 2.8, 3, SEED + 50);
+      const fine   = noise2(nx * 7, ny * 7,     SEED + 100);
+      const v = base * 0.55 + detail * 0.30 + fine * 0.15;
+
+      let r, g, b;
+      if      (v < 0.22) { const t=v/0.22;       r=15+t*14; g=10+t*12; b=5+t*7; }
+      else if (v < 0.42) { const t=(v-0.22)/0.20; r=29+t*18; g=22+t*30; b=12+t*12; }
+      else if (v < 0.60) { const t=(v-0.42)/0.18; r=47+t*40; g=52+t*52; b=24+t*20; }
+      else if (v < 0.78) { const t=(v-0.60)/0.18; r=87+t*55; g=104+t*55; b=44+t*20; }
+      else               { const t=(v-0.78)/0.22; r=142+t*45; g=159+t*35; b=64+t*18; }
+
+      const tex = (fine - 0.5) * 18;
+      const i4 = (y * W + x) * 4;
+      d[i4]   = Math.max(0, Math.min(255, r + tex));
+      d[i4+1] = Math.max(0, Math.min(255, g + tex));
+      d[i4+2] = Math.max(0, Math.min(255, b + tex));
+      d[i4+3] = 255;
+    }
+  }
+  landscapeData = img;
+
+  // Generate features
+  features = [];
+  const count = Math.floor(W * H / 12000);
+  for (let i = 0; i < count; i++) {
+    const x = 30 + Math.random() * (W - 60);
+    const y = 30 + Math.random() * (H - 60);
+    const r = Math.random();
+    if      (r < 0.32) features.push({x, y, type:'flower',   size: 4+Math.random()*9,  color: ['#c8401a','#d06020','#b0800a','#4060c8','#9030a0'][Math.floor(Math.random()*5)], angle: Math.random()*Math.PI*2});
+    else if (r < 0.52) features.push({x, y, type:'mushroom', size: 5+Math.random()*11, color: ['#c8a060','#a08040','#d0b878'][Math.floor(Math.random()*3)]});
+    else if (r < 0.62) features.push({x, y, type:'web',      size: 18+Math.random()*45});
+    else if (r < 0.78) features.push({x, y, type:'weevil',   size: 3+Math.random()*5,  angle: Math.random()*Math.PI*2});
+    else               features.push({x, y, type:'lichen',   size: 6+Math.random()*18, hue: 80+Math.random()*60});
+  }
+}
+
+function drawLandscape() {
+  if (!landscapeData) return;
+  ctx.putImageData(landscapeData, 0, 0);
+  for (const f of features) {
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    switch (f.type) {
+      case 'flower':   drawFlower(f);   break;
+      case 'mushroom': drawMushroom(f); break;
+      case 'web':      drawWeb(f);      break;
+      case 'weevil':   drawWeevil(f);   break;
+      case 'lichen':   drawLichen(f);   break;
+    }
+    ctx.restore();
+  }
+}
+
+function drawFlower(f) {
+  ctx.rotate(f.angle);
+  for (let i = 0; i < 6; i++) {
+    const a = (i/6)*Math.PI*2;
+    ctx.save(); ctx.rotate(a);
+    ctx.beginPath();
+    ctx.ellipse(f.size*0.7, 0, f.size*0.45, f.size*0.22, 0, 0, Math.PI*2);
+    ctx.fillStyle = f.color; ctx.globalAlpha = 0.68; ctx.fill();
+    ctx.restore();
+  }
+  ctx.beginPath(); ctx.arc(0,0,f.size*0.28,0,Math.PI*2);
+  ctx.fillStyle = '#f0d060'; ctx.globalAlpha = 0.9; ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawMushroom(f) {
+  ctx.fillStyle = '#cdbfa0'; ctx.globalAlpha = 0.55;
+  ctx.fillRect(-f.size*0.18, 0, f.size*0.36, f.size*0.75);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, f.size*0.68, f.size*0.38, 0, Math.PI, 0);
+  ctx.fillStyle = f.color; ctx.globalAlpha = 0.72; ctx.fill();
+  // spots
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc((i-1)*f.size*0.24, -f.size*0.18, f.size*0.07, 0, Math.PI*2);
+    ctx.fillStyle = '#fff8e0'; ctx.globalAlpha = 0.4; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawWeb(f) {
+  ctx.strokeStyle = '#c8a830'; ctx.globalAlpha = 0.22; ctx.lineWidth = 0.6;
+  for (let i = 0; i < 8; i++) {
+    const a = (i/8)*Math.PI*2;
+    ctx.beginPath(); ctx.moveTo(0,0);
+    ctx.lineTo(Math.cos(a)*f.size, Math.sin(a)*f.size); ctx.stroke();
+  }
+  for (let r2 = f.size*0.22; r2 <= f.size; r2 += f.size*0.22) {
+    ctx.beginPath(); ctx.arc(0,0,r2,0,Math.PI*2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawWeevil(f) {
+  ctx.rotate(f.angle); ctx.globalAlpha = 0.7;
+  // body
+  ctx.beginPath(); ctx.ellipse(0,0,f.size,f.size*0.58,0,0,Math.PI*2);
+  ctx.fillStyle = '#3a2a14'; ctx.fill();
+  // elytra line
+  ctx.beginPath(); ctx.moveTo(-f.size*0.1,-f.size*0.5); ctx.lineTo(-f.size*0.1,f.size*0.5);
+  ctx.strokeStyle = '#251a0c'; ctx.lineWidth = 0.8; ctx.stroke();
+  // THE SNOUT — the absolute commitment to snout
+  ctx.beginPath();
+  ctx.moveTo(f.size*0.95, 0);
+  ctx.bezierCurveTo(f.size*1.3, -f.size*0.05, f.size*1.7, f.size*0.08, f.size*2.1, f.size*0.05);
+  ctx.lineWidth = f.size*0.22; ctx.strokeStyle = '#3a2a14'; ctx.stroke();
+  // legs
+  ctx.lineWidth = 0.7; ctx.strokeStyle = '#251a0c';
+  for (let i = -1; i <= 1; i++) {
+    const lx = i * f.size * 0.38;
+    ctx.beginPath(); ctx.moveTo(lx, -f.size*0.52); ctx.lineTo(lx-f.size*0.35, -f.size*0.95); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lx,  f.size*0.52); ctx.lineTo(lx-f.size*0.35,  f.size*0.95); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawLichen(f) {
+  ctx.globalAlpha = 0.35;
+  for (let i = 0; i < 7; i++) {
+    const a = Math.random()*Math.PI*2, r2 = Math.random()*f.size;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a)*r2, Math.sin(a)*r2, f.size*0.18+Math.random()*f.size*0.22, 0, Math.PI*2);
+    ctx.fillStyle = `hsl(${f.hue},45%,${28+Math.random()*18}%)`; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── Rover ─────────────────────────────────────────────────────────────────────
+const rover = {
+  x: 0, y: 0, vx: 0, vy: 0,
+  state: 'moving',
+  elapsed: 0,
+  moveTimer: 0, nextStop: 3500 + Math.random()*3000,
+  stopTimer: 0, stopDuration: 0,
+  captureTimer: 0, captureFlash: 0,
+  frameCount: 0,
+  targetX: 0, targetY: 0,
+  trail: []
+};
+
+function initRover() {
+  rover.x = W * 0.35 + Math.random() * W * 0.3;
+  rover.y = H * 0.35 + Math.random() * H * 0.3;
+  pickTarget();
+}
+
+function pickTarget() {
+  if (features.length && Math.random() < 0.65) {
+    const f = features[Math.floor(Math.random()*features.length)];
+    rover.targetX = f.x + (Math.random()-0.5)*25;
+    rover.targetY = f.y + (Math.random()-0.5)*25;
+  } else {
+    rover.targetX = W*0.08 + Math.random()*W*0.84;
+    rover.targetY = H*0.08 + Math.random()*H*0.84;
+  }
+}
+
+function updateRover(dt) {
+  rover.elapsed += dt;
+
+  if (rover.state === 'moving') {
+    const dx = rover.targetX - rover.x, dy = rover.targetY - rover.y;
+    const dist = Math.hypot(dx, dy);
+    const spd  = 38;
+    if (dist < 6) { pickTarget(); }
+    else {
+      rover.vx += (dx/dist*spd - rover.vx) * 0.04;
+      rover.vy += (dy/dist*spd - rover.vy) * 0.04;
+    }
+    rover.x += rover.vx * dt/1000;
+    rover.y += rover.vy * dt/1000;
+    rover.x  = Math.max(20, Math.min(W-20, rover.x));
+    rover.y  = Math.max(20, Math.min(H-20, rover.y));
+
+    // Trail
+    rover.trail.push({x: rover.x, y: rover.y, age: 0});
+    if (rover.trail.length > 120) rover.trail.shift();
+    rover.trail.forEach(p => p.age += dt);
+
+    rover.moveTimer += dt;
+    if (rover.moveTimer > rover.nextStop) {
+      rover.state = 'stopping'; rover.moveTimer = 0;
+    }
+
+  } else if (rover.state === 'stopping') {
+    rover.vx *= 0.88; rover.vy *= 0.88;
+    rover.x += rover.vx * dt/1000;
+    rover.y += rover.vy * dt/1000;
+    if (Math.hypot(rover.vx, rover.vy) < 0.5) {
+      rover.state = 'capturing'; rover.captureTimer = 0; rover.captureFlash = 1;
+    }
+
+  } else if (rover.state === 'capturing') {
+    rover.captureTimer += dt;
+    rover.captureFlash = Math.max(0, 1 - rover.captureTimer/350);
+    if (rover.captureTimer > 450) {
+      captureFrame();
+      rover.state = 'stopped'; rover.stopTimer = 0;
+      rover.stopDuration = 1800 + Math.random()*2800;
+    }
+
+  } else if (rover.state === 'stopped') {
+    rover.stopTimer += dt;
+    if (rover.stopTimer > rover.stopDuration) {
+      rover.state = 'moving'; pickTarget();
+      rover.nextStop = 3000 + Math.random()*4500;
+    }
+  }
+}
+
+function drawRover() {
+  // Trail
+  for (const p of rover.trail) {
+    const a = Math.max(0, 0.08 - p.age/12000);
+    if (a <= 0) continue;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 1.2, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(0,180,200,${a})`; ctx.fill();
+  }
+
+  const x = rover.x, y = rover.y;
+
+  // Capture flash
+  if (rover.captureFlash > 0) {
+    ctx.beginPath(); ctx.arc(x, y, 28, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(0,229,255,${rover.captureFlash * 0.25})`; ctx.fill();
+  }
+
+  // Glow
+  const g = ctx.createRadialGradient(x,y,0,x,y,14);
+  g.addColorStop(0, 'rgba(0,229,255,0.28)');
+  g.addColorStop(1, 'rgba(0,229,255,0)');
+  ctx.beginPath(); ctx.arc(x,y,14,0,Math.PI*2);
+  ctx.fillStyle = g; ctx.fill();
+
+  // Core dot
+  const isResting = rover.state === 'stopped';
+  ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2);
+  ctx.fillStyle = isResting ? '#34d399' : '#00e5ff'; ctx.fill();
+
+  // Rest progress ring
+  if (isResting) {
+    const prog = rover.stopTimer / rover.stopDuration;
+    ctx.beginPath();
+    ctx.arc(x, y, 9, -Math.PI/2, -Math.PI/2 + prog*Math.PI*2);
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.7; ctx.stroke(); ctx.globalAlpha = 1;
+  }
+}
+
+// ── Frame capture ─────────────────────────────────────────────────────────────
+const frames = [];
+
+function captureFrame() {
+  rover.frameCount++;
+  const ts  = (rover.elapsed / 1000).toFixed(1);
+  const lbl = `F${String(rover.frameCount).padStart(2,'0')} | ${ts}s`;
+
+  const fw = 120, fh = 90;
+  const sx = Math.max(0, Math.min(W-fw, rover.x - fw/2)) | 0;
+  const sy = Math.max(0, Math.min(H-fh, rover.y - fh/2)) | 0;
+
+  const off = document.createElement('canvas');
+  off.width = fw; off.height = fh;
+  const oc  = off.getContext('2d');
+  oc.drawImage(canvas, sx, sy, fw, fh, 0, 0, fw, fh);
+
+  // Mark rover position in thumbnail
+  oc.beginPath(); oc.arc(rover.x-sx, rover.y-sy, 2.5, 0, Math.PI*2);
+  oc.fillStyle = '#34d399'; oc.fill();
+
+  frames.unshift({canvas: off, label: lbl});
+  if (frames.length > 15) frames.pop();
+
+  rebuildGrid();
+  document.getElementById('status').textContent = lbl;
+}
+
+function rebuildGrid() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  for (const f of frames.slice(0, 10)) {
+    const cell = document.createElement('div');
+    cell.className = 'fcell';
+    cell.appendChild(f.canvas.cloneNode(true));
+    const lbl = document.createElement('div');
+    lbl.className = 'flabel'; lbl.textContent = f.label;
+    cell.appendChild(lbl);
+    grid.appendChild(cell);
+    requestAnimationFrame(() => cell.classList.add('visible'));
+  }
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────────────
+let last = null;
+
+function loop(ts) {
+  if (!last) last = ts;
+  const dt = Math.min(ts - last, 50); // cap delta to avoid jumps
+  last = ts;
+  drawLandscape();
+  updateRover(dt);
+  drawRover();
+  requestAnimationFrame(loop);
+}
+
+function init() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  generateLandscape();
+  initRover();
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', () => {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  generateLandscape();
+});
+
+init();
+</script>
+</body>
+</html>
