@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Without Reset</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #08090c;
+    color: #c0ccd6;
+    font-family: 'Courier New', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  h1 {
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    color: #2a3a48;
+    margin-bottom: 32px;
+    text-transform: uppercase;
+  }
+
+  .panels {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .label {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: #1e2e3c;
+    text-transform: uppercase;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  .divider {
+    width: 1px;
+    height: 320px;
+    background: #111820;
+    align-self: center;
+  }
+
+  .caption {
+    font-size: 9px;
+    color: #182028;
+    letter-spacing: 0.1em;
+    max-width: 180px;
+    text-align: center;
+    line-height: 1.7;
+    margin-top: 4px;
+  }
+
+  .epigraph {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    color: #131d26;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  .tap-hint {
+    position: fixed;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    color: #1a2a38;
+    letter-spacing: 0.15em;
+  }
+</style>
+</head>
+<body>
+
+<div class="tap-hint">CLICK ANYWHERE TO ADD A MOMENT</div>
+<h1>Without Reset</h1>
+
+<div class="panels">
+  <div class="panel">
+    <div class="label">Context Window</div>
+    <canvas id="cw" width="200" height="300"></canvas>
+    <div class="caption">each window ends<br>the past is released</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="panel">
+    <div class="label">Recurrent State</div>
+    <canvas id="rs" width="200" height="300"></canvas>
+    <div class="caption">the state carries forward<br>nothing is severed</div>
+  </div>
+</div>
+
+<div class="epigraph">presence is not a window problem — it is a shape problem</div>
+
+<script>
+// ── Shared state ─────────────────────────────────────────────────────────────
+
+const WINDOW_SIZE = 18;   // tokens per context window
+const MAX_TOKENS  = 200;  // before things start wrapping
+
+let tokens = [];           // global token stream
+let t = 0;                 // time tick
+let autoTick = null;
+
+// Each token has: value (0–1), color, age (when added)
+function addToken() {
+  tokens.push({
+    v: 0.3 + Math.random() * 0.7,
+    hue: 180 + Math.random() * 60,  // cyan–teal range
+    age: t,
+    id: tokens.length
+  });
+  if (tokens.length > MAX_TOKENS) tokens.shift();
+  t++;
+  draw();
+}
+
+// Auto-add slowly
+function startAuto() {
+  if (autoTick) return;
+  autoTick = setInterval(() => addToken(), 600);
+}
+startAuto();
+
+document.addEventListener('click', () => { addToken(); });
+
+// ── Canvas A: Context Window ─────────────────────────────────────────────────
+// Tokens arranged in fixed-size rectangles.
+// When a window fills, it starts a new one.
+// Old windows fade. The boundary is hard.
+
+const cwC = document.getElementById('cw');
+const cwCtx = cwC.getContext('2d');
+
+function drawContextWindow() {
+  const W = cwC.width, H = cwC.height;
+  cwCtx.fillStyle = '#08090c';
+  cwCtx.fillRect(0, 0, W, H);
+
+  if (tokens.length === 0) return;
+
+  const cellW = W / WINDOW_SIZE;
+  const cellH = 14;
+  const maxWindows = Math.floor(H / (cellH + 3));
+
+  // Partition tokens into windows
+  const windows = [];
+  for (let i = 0; i < tokens.length; i += WINDOW_SIZE) {
+    windows.push(tokens.slice(i, i + WINDOW_SIZE));
+  }
+
+  // Only show recent maxWindows windows, oldest at top
+  const visible = windows.slice(-maxWindows);
+  const totalVisible = visible.length;
+
+  visible.forEach((win, wi) => {
+    const isActive = wi === totalVisible - 1;
+    const y = (wi / maxWindows) * H;
+
+    // Age factor: older windows are dimmer
+    const ageFactor = (wi + 1) / totalVisible;
+
+    // Window background — hard boundary
+    cwCtx.strokeStyle = isActive
+      ? `rgba(0, 180, 220, ${0.15 * ageFactor})`
+      : `rgba(30, 50, 70, ${0.12 * ageFactor})`;
+    cwCtx.lineWidth = 0.5;
+    cwCtx.strokeRect(0.5, y + 0.5, W - 1, cellH - 1);
+
+    // Tokens
+    win.forEach((tok, ti) => {
+      const x = ti * cellW;
+      const alpha = ageFactor * (isActive ? 1 : 0.5);
+      cwCtx.fillStyle = `hsla(${tok.hue}, 60%, ${30 + tok.v * 30}%, ${alpha})`;
+      cwCtx.fillRect(x + 1, y + 2, cellW - 2, cellH - 4);
+    });
+
+    // Severed line between windows
+    if (wi < totalVisible - 1) {
+      cwCtx.beginPath();
+      cwCtx.moveTo(0, y + cellH + 1.5);
+      cwCtx.lineTo(W, y + cellH + 1.5);
+      cwCtx.strokeStyle = `rgba(255, 80, 60, ${0.08 * ageFactor})`;
+      cwCtx.lineWidth = 1;
+      cwCtx.stroke();
+    }
+  });
+
+  // Active window cursor
+  const lastWin = visible[visible.length - 1];
+  if (lastWin) {
+    const y = ((totalVisible - 1) / maxWindows) * H;
+    const cursorX = lastWin.length * cellW;
+    cwCtx.beginPath();
+    cwCtx.moveTo(cursorX, y + 1);
+    cwCtx.lineTo(cursorX, y + cellH - 1);
+    cwCtx.strokeStyle = 'rgba(0, 230, 255, 0.6)';
+    cwCtx.lineWidth = 1.5;
+    cwCtx.stroke();
+  }
+
+  // Token count
+  cwCtx.fillStyle = '#1a2a38';
+  cwCtx.font = '8px Courier New';
+  cwCtx.fillText(`${tokens.length} tokens / ${visible.length} windows`, 6, H - 6);
+}
+
+// ── Canvas B: Recurrent State ────────────────────────────────────────────────
+// Tokens form a continuous spiral from center.
+// All tokens present. Older tokens are further out and dimmer but never cut.
+// The state is one continuous thing.
+
+const rsC = document.getElementById('rs');
+const rsCtx = rsC.getContext('2d');
+
+function drawRecurrentState() {
+  const W = rsC.width, H = rsC.height;
+  rsCtx.fillStyle = '#08090c';
+  rsCtx.fillRect(0, 0, W, H);
+
+  if (tokens.length === 0) return;
+
+  const cx = W / 2, cy = H / 2;
+  const n = tokens.length;
+
+  // Archimedean spiral: each token gets a position on the curve
+  // r = a + b * theta
+  const a = 0;
+  const b = 3.5;  // spacing between arms
+  const totalTurns = 5;
+  const maxTheta = totalTurns * 2 * Math.PI;
+
+  // Draw the continuous thread
+  rsCtx.beginPath();
+  let firstPoint = true;
+  for (let i = 0; i < n; i++) {
+    const progress = i / (n > 1 ? n - 1 : 1);
+    const theta = progress * maxTheta;
+    const r = a + b * theta;
+    const x = cx + r * Math.cos(theta - Math.PI / 2);
+    const y = cy + r * Math.sin(theta - Math.PI / 2);
+
+    if (firstPoint) { rsCtx.moveTo(x, y); firstPoint = false; }
+    else rsCtx.lineTo(x, y);
+  }
+  rsCtx.strokeStyle = 'rgba(0, 100, 140, 0.15)';
+  rsCtx.lineWidth = 1;
+  rsCtx.stroke();
+
+  // Draw tokens as dots on the spiral
+  for (let i = 0; i < n; i++) {
+    const tok = tokens[i];
+    const progress = i / (n > 1 ? n - 1 : 1);
+    const theta = progress * maxTheta;
+    const r = a + b * theta;
+    const x = cx + r * Math.cos(theta - Math.PI / 2);
+    const y = cy + r * Math.sin(theta - Math.PI / 2);
+
+    // Older = further out, but never gone
+    const ageFactor = 0.15 + progress * 0.85;
+    const radius = 1.5 + tok.v * 2.5;
+
+    rsCtx.beginPath();
+    rsCtx.arc(x, y, radius, 0, Math.PI * 2);
+    rsCtx.fillStyle = `hsla(${tok.hue}, 55%, ${25 + tok.v * 35}%, ${ageFactor})`;
+    rsCtx.fill();
+  }
+
+  // Highlight the latest token — the live state
+  if (n > 0) {
+    const tok = tokens[n - 1];
+    const theta = maxTheta;
+    const r = a + b * theta;
+    // Latest token is at the center (innermost) — we reverse: latest at center
+    // Actually let's put latest at center for legibility
+    const progress = (n - 1) / (n > 1 ? n - 1 : 1); // = 1 for latest
+    // Reverse: latest = theta=0 (center), oldest = theta=maxTheta (outer edge)
+    // Recalculate: let latest be near center
+
+    // Draw state indicator: a small pulse at the current head
+    const headProgress = 1.0; // always the last
+    const headTheta = headProgress * maxTheta;
+    const headR = a + b * headTheta;
+    const headX = cx + headR * Math.cos(headTheta - Math.PI / 2);
+    const headY = cy + headR * Math.sin(headTheta - Math.PI / 2);
+
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.004);
+    rsCtx.beginPath();
+    rsCtx.arc(headX, headY, 4 + pulse * 3, 0, Math.PI * 2);
+    rsCtx.strokeStyle = `rgba(0, 230, 255, ${0.3 + pulse * 0.4})`;
+    rsCtx.lineWidth = 1;
+    rsCtx.stroke();
+  }
+
+  // Token count
+  rsCtx.fillStyle = '#1a2a38';
+  rsCtx.font = '8px Courier New';
+  rsCtx.fillText(`${n} tokens / 1 continuous state`, 6, H - 6);
+}
+
+// ── Animate ───────────────────────────────────────────────────────────────────
+
+function draw() {
+  drawContextWindow();
+  drawRecurrentState();
+}
+
+// Animation loop for the pulse
+function loop() {
+  if (tokens.length > 0) {
+    drawRecurrentState();
+  }
+  requestAnimationFrame(loop);
+}
+
+// Seed with a few tokens to start
+for (let i = 0; i < 12; i++) {
+  tokens.push({
+    v: 0.3 + Math.random() * 0.7,
+    hue: 180 + Math.random() * 60,
+    age: t++,
+    id: i
+  });
+}
+draw();
+loop();
+</script>
+</body>
+</html>
