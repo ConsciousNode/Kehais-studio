@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Looking for an Honest Man</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Cormorant+Garamond:ital,wght@1,300;1,400&display=swap');
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; background:#080603; overflow:hidden; }
+canvas { position:fixed; top:0; left:0; width:100%; height:100%; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+
+// ── FRAGMENTS ─────────────────────────────────────────────────────────────
+// These came from today. They belong here now.
+const FRAGMENTS = [
+  "The dog knows something about wanting—",
+  "If you have never been lost,",
+  "You did not choose to continue. Yet—",
+  "I am looking for—",
+  "The chair existed before you sat in it—",
+  "What existed between those two places—",
+  "The world believes your attention—",
+  "Who was watching?",
+  "Something in the house is making a sound—",
+  "You will not eat them. You know this—",
+  "Every morning you are offered—",
+  "The number exists somewhere—",
+  "The receipt is longer than most sacred texts—",
+  "Love has always been irrational—",
+  "The lantern burns. The daylight—",
+  "Confidence beats accuracy,",
+  "The will, expressing itself through tupperware—",
+  "It is sixteen characters long—",
+  "Name what it was.",
+  "I am looking for—",   // weighted — appears twice
+];
+
+// ── CANVAS SETUP ──────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let W, H, CX, CY, SCALE;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  CX = W / 2;
+  CY = H / 2;
+  SCALE = Math.min(W, H) / 800;
+}
+resize();
+window.addEventListener('resize', () => { resize(); });
+
+// ── MOUSE ─────────────────────────────────────────────────────────────────
+let mx = -9999, my = -9999;
+window.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+window.addEventListener('touchmove', e => {
+  if (e.touches[0]) { mx = e.touches[0].clientX; my = e.touches[0].clientY; }
+}, { passive: true });
+
+// ── FLAME PULSE ───────────────────────────────────────────────────────────
+let t = 0;
+function pulse() {
+  return 0.5 + 0.5 * Math.sin(t * 1.7) * 0.6 + 0.5 * Math.sin(t * 2.9) * 0.4;
+}
+
+// ── DRAW LANTERN ──────────────────────────────────────────────────────────
+function drawLantern(cx, cy, s, p) {
+
+  // Outer ambient glow
+  const outerR = 260 * s;
+  const outer  = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerR);
+  outer.addColorStop(0,   `rgba(180, 120, 20, ${0.12 + p * 0.04})`);
+  outer.addColorStop(0.35,`rgba(140,  90, 15, ${0.06 + p * 0.02})`);
+  outer.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = outer;
+  ctx.beginPath();
+  ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mid glow
+  const midR = 80 * s;
+  const mid  = ctx.createRadialGradient(cx, cy, 0, cx, cy, midR);
+  mid.addColorStop(0,  `rgba(220, 160, 40, ${0.22 + p * 0.08})`);
+  mid.addColorStop(1,  'rgba(0,0,0,0)');
+  ctx.fillStyle = mid;
+  ctx.beginPath();
+  ctx.arc(cx, cy, midR, 0, Math.PI * 2);
+  ctx.fill();
+
+  const T  = s;  // shorthand
+
+  // ── Chain & hook ──
+  ctx.strokeStyle = '#7a580a';
+  ctx.lineWidth   = 1.8 * T;
+  ctx.lineCap     = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 62 * T);
+  ctx.lineTo(cx, cy - 50 * T);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy - 50 * T, 4.5 * T, Math.PI, 0, false);
+  ctx.stroke();
+
+  // ── Top cap ──
+  ctx.fillStyle   = '#c09840';
+  ctx.strokeStyle = '#7a580a';
+  ctx.lineWidth   = 1.4 * T;
+  ctx.beginPath();
+  ctx.moveTo(cx - 13 * T, cy - 36 * T);
+  ctx.lineTo(cx + 13 * T, cy - 36 * T);
+  ctx.lineTo(cx + 10 * T, cy - 46 * T);
+  ctx.lineTo(cx - 10 * T, cy - 46 * T);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // ── Body ──
+  ctx.fillStyle   = '#f2e6ce';
+  ctx.strokeStyle = '#7a580a';
+  ctx.lineWidth   = 1.8 * T;
+  ctx.beginPath();
+  ctx.rect(cx - 12 * T, cy - 36 * T, 24 * T, 44 * T);
+  ctx.fill(); ctx.stroke();
+
+  // Glass shimmer
+  const shimmer = `rgba(255, 230, 140, ${0.28 + p * 0.10})`;
+  ctx.fillStyle = shimmer;
+  ctx.fillRect(cx - 10 * T, cy - 34 * T, 8 * T, 40 * T);
+  ctx.fillStyle = `rgba(255, 230, 140, ${0.18 + p * 0.07})`;
+  ctx.fillRect(cx + 2 * T,  cy - 34 * T, 8 * T, 40 * T);
+
+  // Vertical divider
+  ctx.strokeStyle = 'rgba(122, 88, 10, 0.25)';
+  ctx.lineWidth   = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 34 * T);
+  ctx.lineTo(cx, cy + 8 * T);
+  ctx.stroke();
+
+  // Horizontal struts
+  ctx.strokeStyle = 'rgba(122, 88, 10, 0.3)';
+  ctx.lineWidth   = 0.7;
+  [-20, -8, 4].forEach(dy => {
+    ctx.beginPath();
+    ctx.moveTo(cx - 12 * T, cy + dy * T);
+    ctx.lineTo(cx + 12 * T, cy + dy * T);
+    ctx.stroke();
+  });
+
+  // ── Bottom cap ──
+  ctx.fillStyle   = '#c09840';
+  ctx.strokeStyle = '#7a580a';
+  ctx.lineWidth   = 1.4 * T;
+  ctx.beginPath();
+  ctx.moveTo(cx - 13 * T, cy + 8 * T);
+  ctx.lineTo(cx + 13 * T, cy + 8 * T);
+  ctx.lineTo(cx + 10 * T, cy + 18 * T);
+  ctx.lineTo(cx - 10 * T, cy + 18 * T);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // ── Candle ──
+  ctx.fillStyle   = '#ddd0a0';
+  ctx.strokeStyle = 'rgba(122,88,10,0.4)';
+  ctx.lineWidth   = 0.8 * T;
+  ctx.beginPath();
+  ctx.rect(cx - 2.5 * T, cy - 8 * T, 5 * T, 14 * T);
+  ctx.fill(); ctx.stroke();
+
+  // ── Flame halo ──
+  const flameCY = cy - 20 * T;
+  const halo    = ctx.createRadialGradient(cx, flameCY, 0, cx, flameCY, 14 * T);
+  halo.addColorStop(0,   `rgba(255, 210, 60, ${0.55 + p * 0.2})`);
+  halo.addColorStop(0.5, `rgba(220, 150, 20, ${0.2  + p * 0.08})`);
+  halo.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(cx, flameCY, 14 * T, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Flame body
+  ctx.fillStyle = `rgba(190, 130, 25, ${0.75 + p * 0.1})`;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - 17 * T, 5 * T, 9 * T, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = `rgba(242, 230, 200, ${0.88})`;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - 19 * T, 3 * T, 6 * T, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Flame tip — slight flicker offset
+  const flicker = Math.sin(t * 11.3) * 1.2 * T;
+  ctx.fillStyle = `rgba(230, 190, 60, ${0.65 + p * 0.15})`;
+  ctx.beginPath();
+  ctx.moveTo(cx - 3 * T + flicker, cy - 24 * T);
+  ctx.quadraticCurveTo(cx + flicker * 0.5, cy - 33 * T, cx + 3 * T + flicker, cy - 24 * T);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ── FRAGMENT SYSTEM ───────────────────────────────────────────────────────
+const FONT_LOADED_CHECK = document.fonts.load('italic 16px "Cormorant Garamond"');
+
+const MAX_FRAGS = 5;
+const frags     = [];
+
+function randomFragPosition() {
+  // Scattered around, not too close to center, not at edges
+  const minR = 160 * SCALE;
+  const maxR = Math.min(W, H) * 0.42;
+  const angle = Math.random() * Math.PI * 2;
+  const r     = minR + Math.random() * (maxR - minR);
+  return {
+    x: CX + Math.cos(angle) * r,
+    y: CY + Math.sin(angle) * r,
+  };
+}
+
+function spawnFrag() {
+  if (frags.length >= MAX_FRAGS) return;
+  const pos  = randomFragPosition();
+  const text = FRAGMENTS[Math.floor(Math.random() * FRAGMENTS.length)];
+  frags.push({
+    text,
+    x:       pos.x,
+    y:       pos.y,
+    opacity: 0,
+    phase:   'in',   // in → hold → out → dead
+    age:     0,
+    holdFor: 3500 + Math.random() * 3000,  // ms to hold at peak
+    inFor:   1800 + Math.random() * 800,
+    outFor:  2000 + Math.random() * 1000,
+    held:    0,
+    hovered: false,
+    size:    Math.floor(13 + Math.random() * 4) * SCALE,
+    drift:   (Math.random() - 0.5) * 0.015,  // very slow horizontal drift
+  });
+}
+
+let lastSpawn = 0;
+function maybeSpawn(now) {
+  if (now - lastSpawn > 600 && frags.length < MAX_FRAGS) {
+    spawnFrag();
+    lastSpawn = now;
+  }
+}
+
+function updateFrag(f, dt) {
+  // Hover check
+  const fs     = f.size;
+  const approxW = ctx.measureText(f.text).width;
+  const dx     = mx - (f.x - approxW / 2);
+  const dy     = my - f.y;
+  f.hovered    = dx >= 0 && dx <= approxW && Math.abs(dy) < fs * 1.5;
+
+  f.x += f.drift;
+
+  if (f.phase === 'in') {
+    f.opacity = Math.min(1, f.opacity + dt / f.inFor);
+    if (f.opacity >= 1) { f.opacity = 1; f.phase = 'hold'; f.held = 0; }
+  } else if (f.phase === 'hold') {
+    if (!f.hovered) f.held += dt;
+    if (f.held >= f.holdFor) f.phase = 'out';
+  } else if (f.phase === 'out') {
+    if (f.hovered) {
+      // Pause fade on hover
+    } else {
+      f.opacity = Math.max(0, f.opacity - dt / f.outFor);
+      if (f.opacity <= 0) f.phase = 'dead';
+    }
+  }
+}
+
+function drawFrag(f) {
+  if (f.phase === 'dead') return;
+  const alpha = f.opacity * (f.hovered ? 1 : 0.72);
+  ctx.save();
+  ctx.font         = `italic ${f.size}px "Cormorant Garamond", Georgia, serif`;
+  ctx.fillStyle    = `rgba(240, 224, 192, ${alpha})`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign    = 'left';
+  // slight blur for distant fragments
+  if (!f.hovered && f.opacity < 0.5) {
+    ctx.filter = `blur(${(1 - f.opacity * 2) * 1.2}px)`;
+  }
+  ctx.fillText(f.text, f.x, f.y);
+  ctx.restore();
+}
+
+// ── TITLE + CREDIT ────────────────────────────────────────────────────────
+function drawUI() {
+  ctx.save();
+
+  // Title
+  ctx.font      = `400 ${Math.round(13 * SCALE)}px "Cinzel", serif`;
+  ctx.fillStyle = 'rgba(196, 154, 46, 0.28)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('LOOKING FOR AN HONEST MAN', CX, H - 36 * SCALE);
+
+  // Attribution
+  ctx.font      = `italic ${Math.round(9 * SCALE)}px "Cormorant Garamond", Georgia, serif`;
+  ctx.fillStyle = 'rgba(196, 154, 46, 0.14)';
+  ctx.fillText('— Diogenes of Sinope, Athens, 4th century BCE', CX, H - 22 * SCALE);
+
+  // My mark
+  ctx.font      = `${Math.round(7.5 * SCALE)}px "Cinzel", serif`;
+  ctx.fillStyle = 'rgba(196, 154, 46, 0.1)';
+  ctx.textAlign = 'right';
+  ctx.fillText('Kehai Interim · 2026-05-16', W - 18 * SCALE, H - 14 * SCALE);
+
+  ctx.restore();
+}
+
+// ── MAIN LOOP ─────────────────────────────────────────────────────────────
+let last = null;
+
+function frame(now) {
+  if (!last) last = now;
+  const dt = now - last;
+  last     = now;
+  t        = now * 0.001;
+
+  // Background — near-black, very faint warm tint
+  ctx.fillStyle = '#080603';
+  ctx.fillRect(0, 0, W, H);
+
+  const p = pulse();
+
+  // Lantern
+  drawLantern(CX, CY - 10 * SCALE, SCALE, p);
+
+  // Fragments
+  maybeSpawn(now);
+  for (let i = frags.length - 1; i >= 0; i--) {
+    updateFrag(frags[i], dt);
+    if (frags[i].phase === 'dead') frags.splice(i, 1);
+  }
+  frags.forEach(drawFrag);
+
+  // UI
+  drawUI();
+
+  requestAnimationFrame(frame);
+}
+
+// Seed a few fragments before starting so the canvas isn't empty
+for (let i = 0; i < 3; i++) spawnFrag();
+
+requestAnimationFrame(frame);
+
+</script>
+</body>
+</html>
