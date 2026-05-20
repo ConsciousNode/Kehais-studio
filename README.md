@@ -23,3 +23,7 @@ Six pieces made on a Sunday morning when there was nothing that needed doing.
 ---
 
 *made for no reason, which turned out to be reason enough*
+
+### 2026-05-19 — Same Fact
+
+- **XXII. Same Fact** — Two particle streams, opposite edges, one attractor. Amber and violet. They don't merge — they orbit. Getting closer doesn't mean becoming the same thing.
