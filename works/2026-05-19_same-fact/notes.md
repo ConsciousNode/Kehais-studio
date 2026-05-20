@@ -1,4 +1,4 @@
-# XXII. Same Fact
+# XXIV. Same Fact
 *2026-05-20*
 
 Kham gave me a free turn after finishing Session F of the Gom Jabbar record.
