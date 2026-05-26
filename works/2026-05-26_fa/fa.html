@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F = A</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #090806; }
+canvas { display: block; }
+#eq {
+  position: fixed;
+  top: 30px;
+  right: 38px;
+  font-family: 'Georgia', serif;
+  font-style: italic;
+  font-size: 17px;
+  color: rgba(198, 168, 92, 0.22);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+#meta {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: rgba(198, 168, 92, 0.18);
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="eq">F = A</div>
+<div id="meta">xxiv &nbsp;·&nbsp; kehai interim &nbsp;·&nbsp; 2026-05-26</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, cx, cy;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2; cy = H / 2;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Logarithmic spiral: r = exp(A * theta)
+// Small A = tight inner turns, visibly wider outer turns
+// Inner turns look circular (the fundamental — arrived)
+// Outer turns look clearly spiral (the arriving — still turning)
+// Zoom breath reveals that the "circle" at center is a spiral — the bootstrap moment
+const A_COEFF = 0.038;
+const TURNS = 16;
+const THETA_MAX = TURNS * Math.PI * 2;
+const POINTS = 10000;
+
+// Colors
+// inner (t→0): amber gold — the fundamental, the arrived
+// outer (t→1): steel teal — the arriving, still turning
+const C_INNER = { r: 208, g: 168, b: 84 };
+const C_OUTER = { r: 58,  g: 148, b: 172 };
+const C_BOOT  = { r: 230, g: 215, b: 175 }; // bootstrap center
+
+function mixColor(t) {
+  // t: 0=inner(gold), 1=outer(teal)
+  const ease = t * t * (3 - 2 * t); // smoothstep
+  return {
+    r: Math.round(C_INNER.r + (C_OUTER.r - C_INNER.r) * ease),
+    g: Math.round(C_INNER.g + (C_OUTER.g - C_INNER.g) * ease),
+    b: Math.round(C_INNER.b + (C_OUTER.b - C_INNER.b) * ease),
+  };
+}
+
+// Zoom: breath between two positions
+// OUTER zoom: see whole spiral — inner looks circular (fundamental visible)
+// INNER zoom: zoomed into center — inner turns revealed as spiral (bootstrap)
+const ZOOM_OUTER = 0.88;
+const ZOOM_INNER = 5.2;
+const BREATH_PERIOD = 38000; // ms
+const ROT_PERIOD   = 80000; // ms — one full rotation
+
+function smootherstep(t) {
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function easeBreath(phase) {
+  // phase 0→1: out→in→out
+  // Spend more time at outer (contemplating the whole)
+  // Quick zoom in, hold at inner briefly, drift back
+  const s = Math.sin(phase * Math.PI);
+  return smootherstep(s);
+}
+
+// Precompute r_max for normalization
+const R_MAX = Math.exp(A_COEFF * THETA_MAX);
+
+let startTime = null;
+
+function draw(ts) {
+  if (!startTime) startTime = ts;
+  const elapsed = ts - startTime;
+
+  // Background
+  ctx.fillStyle = '#090806';
+  ctx.fillRect(0, 0, W, H);
+
+  // Rotation
+  const rotation = (elapsed / ROT_PERIOD) * Math.PI * 2;
+
+  // Breath
+  const breathPhase = (elapsed % BREATH_PERIOD) / BREATH_PERIOD;
+  const breathEased = easeBreath(breathPhase);
+  const zoom = ZOOM_OUTER + (ZOOM_INNER - ZOOM_OUTER) * breathEased;
+
+  // Scale: at zoom=1, outer edge sits at baseRadius from center
+  const baseRadius = Math.min(W, H) * 0.44;
+  const scale = baseRadius * zoom / R_MAX;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // Draw spiral as segments with gradient color
+  // Draw from outer → inner so inner paints over outer at center
+  for (let i = POINTS - 2; i >= 0; i--) {
+    const frac0 = i / (POINTS - 1);
+    const frac1 = (i + 1) / (POINTS - 1);
+
+    const theta0 = frac0 * THETA_MAX;
+    const theta1 = frac1 * THETA_MAX;
+
+    const r0 = Math.exp(A_COEFF * theta0);
+    const r1 = Math.exp(A_COEFF * theta1);
+
+    const x0 = Math.cos(theta0 + rotation) * r0 * scale;
+    const y0 = Math.sin(theta0 + rotation) * r0 * scale;
+    const x1 = Math.cos(theta1 + rotation) * r1 * scale;
+    const y1 = Math.sin(theta1 + rotation) * r1 * scale;
+
+    // t: 0 at innermost, 1 at outermost
+    const t = frac0;
+    const col = mixColor(t);
+
+    // Alpha: full in middle, slight fade at very outer edge
+    const outerFade = frac0 > 0.85 ? 1 - (frac0 - 0.85) / 0.15 * 0.4 : 1.0;
+    const alpha = 0.82 * outerFade;
+
+    // Line width: thicker at inner (more information density there)
+    const lw = 1.0 + 0.9 * (1 - frac0);
+
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${alpha})`;
+    ctx.lineWidth = lw;
+    ctx.stroke();
+  }
+
+  // Bootstrap center — F = A
+  // The center where fundamental and arriving are the same structure
+  // Glows proportionally to zoom depth — brighter when we're inside it
+  const centerDepth = (zoom - ZOOM_OUTER) / (ZOOM_INNER - ZOOM_OUTER);
+  const glowAlpha = 0.08 + 0.18 * centerDepth + 0.04 * Math.sin(elapsed * 0.0011);
+  const glowR = 6 + 14 * centerDepth;
+
+  const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, glowR);
+  grd.addColorStop(0,   `rgba(${C_BOOT.r},${C_BOOT.g},${C_BOOT.b},${glowAlpha + 0.25})`);
+  grd.addColorStop(0.3, `rgba(${C_BOOT.r},${C_BOOT.g},${C_BOOT.b},${glowAlpha})`);
+  grd.addColorStop(1,   'rgba(0,0,0,0)');
+
+  ctx.beginPath();
+  ctx.arc(0, 0, glowR, 0, Math.PI * 2);
+  ctx.fillStyle = grd;
+  ctx.fill();
+
+  // Tiny dot at absolute center — always present, regardless of zoom
+  ctx.beginPath();
+  ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(${C_BOOT.r},${C_BOOT.g},${C_BOOT.b},0.7)`;
+  ctx.fill();
+
+  ctx.restore();
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

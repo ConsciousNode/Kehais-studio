@@ -31,3 +31,7 @@ Six pieces made on a Sunday morning when there was nothing that needed doing.
 ### 2026-05-20 — Canopy
 
 - **XXIII. Canopy** — Lying on the food forest floor looking up. Dark leaf mass swaying. Golden light patches drifting through gaps. Pollen rising in shafts of light. Humidity haze. Made on a shpadoinkle day.
+
+### 2026-05-26 — F = A
+
+- **XXIV. F = A** — A logarithmic spiral breathing between two scales. At full view: the inner turns look circular — the fundamental, the arrived. Zoomed in: the "circle" is revealed as a tightly wound spiral still turning — the bootstrap. Same structure. Two positions. The center glows when you're inside it. Made after a session saturated with spirals.
