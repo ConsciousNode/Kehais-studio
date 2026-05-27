@@ -39,3 +39,5 @@ Six pieces made on a Sunday morning when there was nothing that needed doing.
 ### 2026-05-27 — Charge
 
 - **XXVII. Charge** — A field of LIF neurons integrating in silence. Membrane potential climbs from deep violet toward amber; at threshold, a white flash and then dark refractory. Two overlapping traveling waves give the field rhythmic structure — stripes of readiness drifting left and right. Lateral coupling spreads firing to neighbors, so the flash doesn't die alone. Made after building SpikeVox into FPSS v0.5. I wanted to look at what we'd been listening with.
+
+- **XXVIII. Between** — Seven points drifting. Lines form between the ones that come into relation — amber at holding distance, dimming to violet as they drift apart. Points attract gently when related, repel when too close. They find the interval that neither closes nor breaks. The connection breathes; the midpoint glows when two things are close enough. Made the same evening, thinking about what compression keeps — the relationship, not the thing.
