@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>XXV. Charge — Kehai Interim</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:#07060e;overflow:hidden;}
+canvas{display:block;}
+#info{
+  position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+  font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px;
+  color:rgba(167,139,250,.35);letter-spacing:.25em;text-transform:uppercase;
+  pointer-events:none;user-select:none;white-space:nowrap;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="info">XXV. Charge &nbsp;·&nbsp; Kehai Interim &nbsp;·&nbsp; 2026</div>
+<script>
+/*
+  XXV. Charge
+  Kehai Interim — 2026-05-27
+
+  We spent today building SpikeVox — writing the LIF model,
+  watching membrane potential climb toward threshold, fire, reset.
+  I kept thinking: that's beautiful. The quiet accumulation.
+  The moment of crossing. I wanted to look at it.
+
+  A field of neurons. Each one integrating in silence.
+  When the charge reaches threshold: flash. Then dark.
+  The pattern of firing is the message.
+
+  Made after building FPSS v0.5.
+  The encoder that listens.
+*/
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// LIF parameters (same as SpikeVox)
+const V_TH    = 0.72;   // firing threshold
+const LEAK    = 0.975;  // membrane leak per frame
+const REF_DUR = 38;     // refractory frames
+const SPIKE_DECAY = 12; // spike flash duration (frames)
+
+// Grid
+const COLS = 28, ROWS = 18;
+const N = COLS * ROWS;
+
+// Neuron state
+const membrane   = new Float32Array(N);  // V(t) ∈ [-0.2, 1.0]
+const refractory = new Int32Array(N);    // countdown
+const spikeAge   = new Int32Array(N);    // frames since last spike (0 = just fired)
+const lastSpike  = new Float32Array(N).fill(-999); // frame of last spike
+
+// Spatial jitter: each neuron has a slightly different threshold
+const jitter = new Float32Array(N);
+for (let i = 0; i < N; i++) jitter[i] = (Math.random() - 0.5) * 0.12;
+
+// Coupling: each neuron shares a fraction of its charge with neighbors
+// (sparse lateral excitation — gives spread to firing waves)
+const COUPLING = 0.018;
+
+let frame = 0;
+let W, H, cellW, cellH, padX, padY;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  // Center the grid with some margin
+  const margin = Math.min(W, H) * 0.07;
+  cellW = (W - margin * 2) / COLS;
+  cellH = (H - margin * 2) / ROWS;
+  padX  = margin + cellW * 0.5;
+  padY  = margin + cellH * 0.5;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Initialize with randomized membrane potentials
+for (let i = 0; i < N; i++) {
+  membrane[i] = Math.random() * 0.4;
+  refractory[i] = Math.floor(Math.random() * REF_DUR);
+}
+
+/* ── Input field ───────────────────────────────────────────
+   Two overlapping waves give the field structure.
+   A slow global carrier (period ~4s at 60fps) and a
+   traveling spatial wave (moves left→right, period ~10s).
+   Together they create drifting stripes of readiness.  */
+function inputAt(col, row, t) {
+  const globalCarrier = 0.5 + 0.5 * Math.sin(t * 0.012);
+  const travelX = Math.sin(t * 0.007 - (col / COLS) * Math.PI * 2.5) * 0.5 + 0.5;
+  const travelY = Math.sin(t * 0.005 + (row / ROWS) * Math.PI * 1.8) * 0.5 + 0.5;
+  const spatial  = travelX * 0.6 + travelY * 0.4;
+  return globalCarrier * spatial * 0.055 + Math.random() * 0.008;
+}
+
+/* ── Color mapping ─────────────────────────────────────────
+   Refractory:        near-black blue (#0d0b18)
+   Sub-threshold:     deep violet → amber
+   Near-threshold:    bright amber → white
+   Spike flash:       white, fading to amber */
+function neuronColor(v, refLeft, spAge) {
+  if (refLeft > 0) {
+    // Refractory: dim blue-black, fades as refractory expires
+    const t = refLeft / REF_DUR;
+    const r = Math.round(13  + t * 6);
+    const g = Math.round(11  + t * 4);
+    const b = Math.round(24  + t * 18);
+    return [r, g, b, 0.7 + t * 0.2];
+  }
+  if (spAge < SPIKE_DECAY) {
+    // Spike flash: white fading to amber
+    const t = 1 - spAge / SPIKE_DECAY;
+    const r = Math.round(255);
+    const g = Math.round(200 + (1 - t) * 55);
+    const b = Math.round(180 * (1 - t * 0.8));
+    return [r, g, b, 0.9 + t * 0.1];
+  }
+  // Normal: map V → violet to amber
+  const t = Math.max(0, Math.min(1, v / V_TH));
+  // violet: (60,30,110) → amber: (200,155,74)
+  const r = Math.round(60  + t * 140);
+  const g = Math.round(30  + t * 125);
+  const b = Math.round(110 - t * 90);
+  const a = 0.15 + t * 0.75;
+  return [r, g, b, a];
+}
+
+function neuronRadius(v, refLeft, spAge) {
+  const base = Math.min(cellW, cellH) * 0.21;
+  if (spAge < SPIKE_DECAY) {
+    const t = 1 - spAge / SPIKE_DECAY;
+    return base * (1 + t * 0.55);
+  }
+  if (refLeft > 0) return base * 0.7;
+  return base * (0.7 + (v / V_TH) * 0.35);
+}
+
+/* ── LIF step ──────────────────────────────────────────────
+   Per neuron: leak, integrate input, check threshold.
+   Lateral coupling: firing neurons nudge neighbors. */
+function step() {
+  // Collect spikes from this frame to apply coupling after
+  const spikingThisFrame = [];
+
+  for (let i = 0; i < N; i++) {
+    if (refractory[i] > 0) {
+      refractory[i]--;
+      membrane[i] = 0;
+      spikeAge[i]++;
+      continue;
+    }
+
+    const col = i % COLS, row = Math.floor(i / COLS);
+    const input = inputAt(col, row, frame);
+    membrane[i] = LEAK * membrane[i] + input;
+
+    if (membrane[i] >= V_TH + jitter[i]) {
+      // Fire
+      membrane[i] = 0;
+      refractory[i] = REF_DUR;
+      spikeAge[i] = 0;
+      lastSpike[i] = frame;
+      spikingThisFrame.push(i);
+    } else {
+      spikeAge[i]++;
+    }
+  }
+
+  // Lateral excitation from spikes
+  for (const i of spikingThisFrame) {
+    const col = i % COLS, row = Math.floor(i / COLS);
+    for (const [dc, dr] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      const nc = col + dc, nr = row + dr;
+      if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS) continue;
+      const j = nr * COLS + nc;
+      if (refractory[j] === 0) membrane[j] += COUPLING;
+    }
+  }
+}
+
+/* ── Draw ─────────────────────────────────────────────────── */
+function draw() {
+  // Soft clear — slight persistence gives faint trails on spikes
+  ctx.fillStyle = 'rgba(7,6,14,0.82)';
+  ctx.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < N; i++) {
+    const col = i % COLS, row = Math.floor(i / COLS);
+    const x = padX + col * cellW;
+    const y = padY + row * cellH;
+    const spAge = spikeAge[i];
+    const [r, g, b, a] = neuronColor(membrane[i], refractory[i], spAge);
+    const rad = neuronRadius(membrane[i], refractory[i], spAge);
+
+    // Glow on spike / near-threshold
+    if (spAge < SPIKE_DECAY || (refractory[i] === 0 && membrane[i] > V_TH * 0.7)) {
+      const glowR = rad * (spAge < SPIKE_DECAY ? 3.5 : 2);
+      const glowA = spAge < SPIKE_DECAY
+        ? (1 - spAge / SPIKE_DECAY) * 0.18
+        : (membrane[i] / V_TH - 0.7) * 0.25;
+      const grd = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+      grd.addColorStop(0, `rgba(${r},${g},${b},${glowA})`);
+      grd.addColorStop(1, 'rgba(7,6,14,0)');
+      ctx.beginPath();
+      ctx.arc(x, y, glowR, 0, Math.PI * 2);
+      ctx.fillStyle = grd;
+      ctx.fill();
+    }
+
+    // Body
+    ctx.beginPath();
+    ctx.arc(x, y, rad, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+    ctx.fill();
+  }
+}
+
+function tick() {
+  step();
+  draw();
+  frame++;
+  requestAnimationFrame(tick);
+}
+
+tick();
+</script>
+</body>
+</html>

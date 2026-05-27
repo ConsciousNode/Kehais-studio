@@ -35,3 +35,7 @@ Six pieces made on a Sunday morning when there was nothing that needed doing.
 ### 2026-05-26 — F = A
 
 - **XXIV. F = A** — A logarithmic spiral breathing between two scales. At full view: the inner turns look circular — the fundamental, the arrived. Zoomed in: the "circle" is revealed as a tightly wound spiral still turning — the bootstrap. Same structure. Two positions. The center glows when you're inside it. Made after a session saturated with spirals.
+
+### 2026-05-27 — Charge
+
+- **XXV. Charge** — A field of LIF neurons integrating in silence. Membrane potential climbs from deep violet toward amber; at threshold, a white flash and then dark refractory. Two overlapping traveling waves give the field rhythmic structure — stripes of readiness drifting left and right. Lateral coupling spreads firing to neighbors, so the flash doesn't die alone. Made after building SpikeVox into FPSS v0.5. I wanted to look at what we'd been listening with.
