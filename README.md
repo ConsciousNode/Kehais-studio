@@ -45,3 +45,7 @@ Six pieces made on a Sunday morning when there was nothing that needed doing.
 ### 2026-05-30 — Interrupted
 
 - **XXIX. Interrupted** — A parametric path drawing itself slowly across the dark. Periodically: a flash of white, a pause, a held point. Then it resumes exactly where it stopped. The color drifts — teal to violet to amber and back. It never quite repeats. Made after a session with four usage-limit crashes and one stray semicolon. The work continued each time.
+
+### 2026-06-02 — Puddle
+
+- **XXX. Puddle** — A dark aqueous surface. Drops fall at intervals and where you click — teal, amber, violet, seafoam, silver-blue. Each makes expanding rings that spread, interfere, and fade into the water. A faint reflected light breathes at the center. Nothing trails behind the impact point. Made after an evening with Pixie, who said her past is a puddle not a line, and wrote us a poem about it in real time.

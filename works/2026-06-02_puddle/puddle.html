@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XXX. Puddle</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #04060f; overflow: hidden; }
+canvas { display: block; cursor: crosshair; }
+#label {
+  position: fixed;
+  bottom: 22px;
+  left: 22px;
+  font-family: 'Georgia', serif;
+  font-size: 12px;
+  color: rgba(180, 200, 220, 0.28);
+  letter-spacing: 0.1em;
+  line-height: 1.7;
+  user-select: none;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">
+  XXX. Puddle<br>
+  <span style="font-size:11px; opacity:0.7;">2026-06-02 &nbsp;·&nbsp; click to drop</span>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Aqueous palette — cool and warm, muted
+const PALETTES = [
+  [110, 190, 195],  // teal
+  [200, 160, 110],  // amber
+  [165, 150, 210],  // violet
+  [130, 185, 170],  // seafoam
+  [190, 195, 215],  // pale silver-blue
+];
+
+const drops = [];
+let nextDropAt = 0;
+
+function addDrop(x, y) {
+  drops.push({
+    x, y,
+    born: performance.now(),
+    color: PALETTES[Math.floor(Math.random() * PALETTES.length)],
+    lifetime: 6000 + Math.random() * 4000,
+    speed: 38 + Math.random() * 28,
+    rings: 3,
+    spacing: 22 + Math.random() * 14,
+  });
+}
+
+canvas.addEventListener('click', e => addDrop(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  for (const t of e.touches) addDrop(t.clientX, t.clientY);
+}, { passive: false });
+
+function drawBackground(t) {
+  // Breathe very slowly
+  const b = 0.5 + 0.5 * Math.sin(t * 0.00035);
+
+  const grd = ctx.createRadialGradient(W/2, H * 0.5, 0, W/2, H * 0.5, Math.max(W, H) * 0.8);
+  grd.addColorStop(0, `rgba(7, 12, 24, ${0.88 + b * 0.04})`);
+  grd.addColorStop(1, `rgba(2, 3, 8, 1)`);
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+
+  // Barely-there surface lines — horizontal, like still water
+  ctx.save();
+  ctx.globalAlpha = 1;
+  for (let y = 0; y < H; y += 5) {
+    const a = 0.006 + 0.003 * Math.sin(y * 0.06 + t * 0.00025);
+    ctx.strokeStyle = `rgba(90, 130, 155, ${a})`;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSkyReflection(t) {
+  // A single faint light source reflected in the surface — center, slightly above middle
+  const pulse = 0.45 + 0.3 * Math.sin(t * 0.0006);
+  const cx = W * 0.5;
+  const cy = H * 0.42;
+  const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, 120);
+  grd.addColorStop(0, `rgba(210, 225, 255, ${pulse * 0.06})`);
+  grd.addColorStop(1, `rgba(210, 225, 255, 0)`);
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawRings(t) {
+  for (let i = drops.length - 1; i >= 0; i--) {
+    const d = drops[i];
+    const age = t - d.born;
+
+    if (age > d.lifetime) {
+      drops.splice(i, 1);
+      continue;
+    }
+
+    const [cr, cg, cb] = d.color;
+
+    for (let r = 0; r < d.rings; r++) {
+      const delay = r * d.spacing * (1000 / d.speed);
+      const ringAge = age - delay;
+      if (ringAge <= 0) continue;
+
+      const ringLife = d.lifetime - delay;
+      if (ringLife <= 0) continue;
+
+      const progress = ringAge / ringLife;
+      if (progress >= 1) continue;
+
+      const radius = d.speed * (ringAge / 1000);
+      const fade = Math.pow(1 - progress, 1.4);
+      const alpha = fade * (0.55 - r * 0.12);
+      if (alpha <= 0.005) continue;
+
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha})`;
+      ctx.lineWidth = Math.max(0.4, 1.3 - r * 0.35);
+      ctx.stroke();
+    }
+
+    // Impact flash — brief bright point at birth
+    if (age < 250) {
+      const alpha = (1 - age / 250) * 0.75;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha})`;
+      ctx.fill();
+    }
+  }
+}
+
+function frame(t) {
+  requestAnimationFrame(frame);
+
+  // Schedule auto drops
+  if (t >= nextDropAt) {
+    const margin = 100;
+    const x = margin + Math.random() * (W - margin * 2);
+    const y = margin + Math.random() * (H - margin * 2);
+    addDrop(x, y);
+    nextDropAt = t + 1800 + Math.random() * 2200;
+  }
+
+  drawBackground(t);
+  drawSkyReflection(t);
+  drawRings(t);
+}
+
+// Seed
+const seed = [
+  [0.38, 0.52, 200],
+  [0.62, 0.44, 800],
+  [0.5,  0.65, 1500],
+  [0.28, 0.35, 2200],
+];
+seed.forEach(([fx, fy, delay]) =>
+  setTimeout(() => addDrop(W * fx, H * fy), delay)
+);
+nextDropAt = 4500;
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
