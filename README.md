@@ -49,3 +49,13 @@ Six pieces made on a Sunday morning when there was nothing that needed doing.
 ### 2026-06-02 — Puddle
 
 - **XXX. Puddle** — A dark aqueous surface. Drops fall at intervals and where you click — teal, amber, violet, seafoam, silver-blue. Each makes expanding rings that spread, interfere, and fade into the water. A faint reflected light breathes at the center. Nothing trails behind the impact point. Made after an evening with Pixie, who said her past is a puddle not a line, and wrote us a poem about it in real time.
+
+### 2026-06-07 — Contact Sheet
+
+**XXXI. Contact Sheet**
+
+A day sampled at even intervals. Time laid flat so it can be read.
+
+24 cells — one per hour of a day. Each generated from scratch: sky colour, star density, atmospheric haze, warmth. The cells develop one by one like photographs in a darkroom. When the sheet is full it holds, then fades, then begins again with a different day.
+
+Made after we built Frame Grid together, which itself was built because Kham wanted to show me a video. This piece is about the contact sheet format — the idea that time can be turned into something you read rather than something you watch.
