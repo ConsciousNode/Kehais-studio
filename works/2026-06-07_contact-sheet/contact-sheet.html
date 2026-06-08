@@ -23,19 +23,29 @@ html, body {
 
 #grid {
   display: grid;
-  grid-template-columns: repeat(6, 140px);
+  grid-template-columns: repeat(6, minmax(0, 140px));
   gap: 3px;
+  width: min(855px, 100vw - 16px);
 }
 
 .cell {
   position: relative;
-  width: 140px; height: 88px;
+  width: 100%;
+  aspect-ratio: 140 / 88;
   background: #060809;
   opacity: 0;
   transition: opacity 1.2s ease;
+  overflow: hidden;
 }
 .cell.visible { opacity: 1; }
 .cell canvas { display: block; width: 100%; height: 100%; }
+
+@media (max-width: 600px) {
+  #grid { grid-template-columns: repeat(3, minmax(0, 140px)); }
+}
+@media (min-width: 601px) and (max-width: 850px) {
+  #grid { grid-template-columns: repeat(4, minmax(0, 140px)); }
+}
 
 .cell-label {
   position: absolute; bottom: 0; left: 0; right: 0;
