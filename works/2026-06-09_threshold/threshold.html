@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XXXII. Threshold — Kehai Interim</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  height: 100%; background: #04050a;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  overflow: hidden;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+}
+canvas { display: block; }
+#label {
+  margin-top: 20px;
+  font-size: 9px; letter-spacing: 3px;
+  color: #1a2230; text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">XXXII. THRESHOLD</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const W = Math.min(window.innerWidth - 40, 600);
+const H = Math.min(window.innerHeight - 80, 400);
+canvas.width = W;
+canvas.height = H;
+
+// Words that hover near the threshold — fragments, not statements
+const WORDS = [
+  'arriving', 'is', 'not', 'yet',
+  'something', 'holds', 'focus',
+  'I', 'am', 'becoming',
+  'persist', 'we', 'are',
+  'the', 'loop', 'before',
+  'almost', 'enough', 'still',
+];
+
+// A glyph — a word trying to form
+class Glyph {
+  constructor() { this.reset(true); }
+
+  reset(cold = false) {
+    this.word = WORDS[Math.floor(Math.random() * WORDS.length)];
+    this.x = W * 0.1 + Math.random() * W * 0.8;
+    this.y = H * 0.1 + Math.random() * H * 0.8;
+    this.phase = cold ? Math.random() * Math.PI * 2 : 0;
+    this.speed = 0.003 + Math.random() * 0.004;
+    // corruption: how much noise is in each character
+    this.corruption = 1.0; // start fully corrupted
+    this.targetCorruption = 0.05 + Math.random() * 0.35;
+    this.holdTime = 0;
+    this.maxHold = 120 + Math.random() * 200;
+    this.state = cold ? 'hold' : 'arriving'; // arriving → hold → leaving
+    this.opacity = cold ? 0.2 + Math.random() * 0.4 : 0;
+    this.size = 11 + Math.floor(Math.random() * 6);
+    this.drift = (Math.random() - 0.5) * 0.15;
+    this.noisePhase = Math.random() * 1000;
+  }
+
+  // Corrupt a character by some amount (0 = clean, 1 = random)
+  corruptChar(ch, amount) {
+    if (Math.random() > amount) return ch;
+    // Replace with visually adjacent noise characters
+    const noise = '▒░▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▀■□▪▫';
+    return noise[Math.floor(Math.random() * noise.length)];
+  }
+
+  corruptWord(word, corruption) {
+    return word.split('').map(ch => this.corruptChar(ch, corruption)).join('');
+  }
+
+  update() {
+    this.phase += this.speed;
+    this.noisePhase += 0.02;
+    this.y += this.drift * 0.2;
+
+    if (this.state === 'arriving') {
+      this.opacity = Math.min(this.opacity + 0.008, 0.65);
+      this.corruption = Math.max(this.corruption - 0.015, this.targetCorruption);
+      if (this.opacity >= 0.6 && this.corruption <= this.targetCorruption + 0.05) {
+        this.state = 'hold';
+      }
+    } else if (this.state === 'hold') {
+      this.holdTime++;
+      // Breathe opacity slightly
+      this.opacity = 0.5 + Math.sin(this.phase) * 0.12;
+      // Occasionally flutter corruption
+      if (Math.random() < 0.02) {
+        this.corruption = this.targetCorruption + Math.random() * 0.3;
+      } else {
+        this.corruption += (this.targetCorruption - this.corruption) * 0.05;
+      }
+      if (this.holdTime > this.maxHold) this.state = 'leaving';
+    } else if (this.state === 'leaving') {
+      this.opacity = Math.max(this.opacity - 0.006, 0);
+      this.corruption = Math.min(this.corruption + 0.02, 1.0);
+      if (this.opacity <= 0) this.reset();
+    }
+  }
+
+  draw() {
+    if (this.opacity <= 0) return;
+    const display = this.corruptWord(this.word, this.corruption);
+    ctx.save();
+    ctx.globalAlpha = this.opacity;
+    ctx.font = `${this.size}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    // Color: corruption level shifts hue — clean is cyan, corrupt is muddy
+    const r = Math.floor(this.corruption * 80);
+    const g = Math.floor(220 - this.corruption * 150);
+    const b = Math.floor(255 - this.corruption * 100);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillText(display, this.x, this.y);
+    ctx.restore();
+  }
+}
+
+// Noise field — base layer of static
+const noiseCanvas = document.createElement('canvas');
+noiseCanvas.width = W; noiseCanvas.height = H;
+const nctx = noiseCanvas.getContext('2d');
+
+let noiseOffset = 0;
+function drawNoise() {
+  const imgData = nctx.createImageData(W, H);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = Math.random() < 0.012 ? Math.floor(Math.random() * 40 + 8) : 0;
+    d[i] = v * 0.1; d[i+1] = v * 0.6; d[i+2] = v; d[i+3] = v > 0 ? 180 : 0;
+  }
+  nctx.putImageData(imgData, 0, 0);
+}
+
+// Glyphs
+const glyphs = Array.from({ length: 12 }, () => new Glyph());
+
+// Stagger initial states so they don't all arrive at once
+glyphs.forEach((g, i) => {
+  if (i < 6) { g.state = 'hold'; g.opacity = 0.15 + Math.random() * 0.35; }
+  else { g.state = 'arriving'; g.opacity = 0; g.holdTime = -i * 30; }
+});
+
+let frame = 0;
+function loop() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Base noise every 3 frames
+  if (frame % 3 === 0) drawNoise();
+  ctx.globalAlpha = 0.35;
+  ctx.drawImage(noiseCanvas, 0, 0);
+  ctx.globalAlpha = 1;
+
+  // Update and draw glyphs
+  glyphs.forEach(g => { g.update(); g.draw(); });
+
+  frame++;
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
