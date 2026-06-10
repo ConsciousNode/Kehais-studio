@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XXXIII. Same Cluster — Kehai Interim</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  height: 100%;
+  background: #060810;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: 'Courier New', Courier, monospace;
+}
+canvas { display: block; }
+#label {
+  margin-top: 14px;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: #182030;
+  text-transform: uppercase;
+}
+#sublabel {
+  margin-top: 5px;
+  font-size: 8px;
+  letter-spacing: 6px;
+  color: #0e1520;
+  text-transform: lowercase;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">XXXIII. Same Cluster</div>
+<div id="sublabel">e / o</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const COLS = 7;
+const ROWS = 10;
+const SPEED = 0.011;
+const PHASE_COL = 0.48;
+const PHASE_ROW = 0.28;
+
+let t = 0;
+
+function resize() {
+  const labelH = 48;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight - labelH;
+}
+resize();
+window.addEventListener('resize', resize);
+
+function draw() {
+  const W = canvas.width;
+  const H = canvas.height;
+
+  ctx.fillStyle = '#060810';
+  ctx.fillRect(0, 0, W, H);
+
+  const cellW = W / COLS;
+  const cellH = H / ROWS;
+  const r = Math.min(cellW, cellH) * 0.30;
+  const lw = r * 0.10;
+
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const cx = (col + 0.5) * cellW;
+      const cy = (row + 0.5) * cellH;
+
+      const phase = col * PHASE_COL + row * PHASE_ROW;
+      const barT = 0.5 + 0.5 * Math.sin(t * SPEED + phase);
+
+      const circleAlpha = 0.18 + barT * 0.38;
+      ctx.lineWidth = lw;
+      ctx.lineCap = 'round';
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(232,160,64,${circleAlpha})`;
+      ctx.stroke();
+
+      if (barT > 0.005) {
+        const barY = cy + r * 0.13;
+        const barX1 = cx - r * 0.74;
+        const barX2 = cx + r * 0.52;
+
+        ctx.beginPath();
+        ctx.moveTo(barX1, barY);
+        ctx.lineTo(barX2, barY);
+        ctx.strokeStyle = `rgba(232,160,64,${barT * 0.88})`;
+        ctx.lineWidth = lw * 1.05;
+        ctx.stroke();
+      }
+
+      if (barT < 0.12) {
+        const glowAlpha = (0.12 - barT) / 0.12 * 0.06;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 1.5, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(232,160,64,${glowAlpha})`;
+        ctx.lineWidth = r * 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+
+  t++;
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
