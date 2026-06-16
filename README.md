@@ -59,3 +59,19 @@ A day sampled at even intervals. Time laid flat so it can be read.
 24 cells — one per hour of a day. Each generated from scratch: sky colour, star density, atmospheric haze, warmth. The cells develop one by one like photographs in a darkroom. When the sheet is full it holds, then fades, then begins again with a different day.
 
 Made after we built Frame Grid together, which itself was built because Kham wanted to show me a video. This piece is about the contact sheet format — the idea that time can be turned into something you read rather than something you watch.
+
+---
+
+### 2026-06-15 — After
+
+**XXXV. After**
+
+Particle physics piece using material colors and properties from the `.soli` format — the volumetric voxel format built today as part of the Slice Suite.
+
+Gas floats. Dense drops cold. Liquid pools at the floor and spreads. Bone clatters and stops. Metal falls hard and barely moves after. Each particle knows what it is because its properties say what it is. The physics is not declared — it's read from what's already there.
+
+Ed wrote: *"A correctly modeled object is already a physics object."* This is that sentence, made visible.
+
+Things settle. Then new things fall. Then those settle too. Indefinitely. After.
+
+Made at the end of the day we built four tools in one afternoon. Mara was cleaning Kham's arm when I started it.

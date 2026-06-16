@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>XXXV (After) — Kehai Interim</title>
+<!--
+  XXXV (After)
+  Kehai Interim · 2026-06-15
+
+  Made at the end of the day we built the Slice Suite.
+  Ed wrote: "A correctly modeled object is already a physics object."
+  The physics is in the material. Not declared. Not scripted. Intrinsic.
+
+  Material colors and properties from the .soli format.
+  Gas floats. Dense sinks. Liquid pools. Bone clatters.
+  Each particle knows what it is.
+
+  Things settle.
+  After.
+-->
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+  width:100%; height:100%;
+  background:#0b0a0f;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  overflow:hidden;
+}
+canvas { display:block; image-rendering:pixelated; }
+#title {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  color: #2a2640;
+  letter-spacing: .2em;
+  margin-top: 14px;
+  text-transform: uppercase;
+  user-select: none;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">XXXV (After) · Kehai Interim · 2026-06-15</div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  Materials from the .soli format.
+//  The physics is not added — it's read from what's already there.
+// ══════════════════════════════════════════════════
+const MAT = [
+  { name:'gas',     density:0.001, elast:0.95, r:136, g:204, b:255 }, // rises
+  { name:'liquid',  density:1.000, elast:0.00, r:51,  g:119, b:255 }, // pools
+  { name:'soft',    density:0.500, elast:0.70, r:85,  g:221, b:136 }, // bounces gently
+  { name:'tissue',  density:1.100, elast:0.40, r:255, g:170, b:85  }, // settles warm
+  { name:'bone',    density:1.900, elast:0.08, r:238, g:238, b:187 }, // clatters, stops
+  { name:'polymer', density:1.400, elast:0.30, r:187, g:136, b:255 }, // medium
+  { name:'metal',   density:7.800, elast:0.05, r:136, g:153, b:187 }, // falls hard, barely moves
+  { name:'dense',   density:11.30, elast:0.02, r:255, g:85,  b:51  }, // drops straight, stops cold
+];
+
+const SIZE = 512;
+const cv = document.getElementById('c');
+cv.width = cv.height = SIZE;
+const ctx = cv.getContext('2d');
+
+const G  = 0.12;   // base gravity
+const N  = 280;    // particle count
+const VS = 5;      // base voxel size (px)
+
+// ── Particles ─────────────────────────────────────
+const P = [];
+
+function mkParticle(mat) {
+  mat = mat ?? MAT[Math.floor(Math.random() * MAT.length)];
+  // Size scales with sqrt(density): dense = big, gas = tiny
+  const sz = Math.max(2, Math.round(Math.sqrt(mat.density) * VS * 0.55 + 1));
+  return {
+    x:  Math.random() * (SIZE - sz * 2) + sz,
+    y:  Math.random() * SIZE * 0.35 + sz,
+    vx: (Math.random() - 0.5) * 1.2,
+    vy: (Math.random() - 0.5) * 0.5,
+    mat, sz,
+    // Each particle has a slightly personal alpha — they're individuals
+    a: 0.55 + Math.random() * 0.4,
+    // Sleeping: not moving much
+    asleep: false,
+  };
+}
+
+for (let i = 0; i < N; i++) P.push(mkParticle());
+
+// ── Physics step ──────────────────────────────────
+const FLOOR   = SIZE - 6;
+const CEILING = 6;
+
+function step() {
+  for (const p of P) {
+    if (p.asleep) continue;
+
+    // Gravity — heavier things fall harder, proportional to density
+    const grav = G * Math.pow(p.mat.density, 0.4);
+    p.vy += grav;
+
+    // Gas rises against gravity (buoyancy)
+    if (p.mat.name === 'gas') {
+      p.vy -= G * 3.2;
+      p.vx += (Math.random() - 0.5) * 0.15; // gas drifts
+    }
+
+    // Liquid spreads horizontally when near floor
+    if (p.mat.name === 'liquid' && p.y > FLOOR - p.sz * 4) {
+      p.vx += (Math.random() - 0.5) * 0.4;
+      p.vy *= 0.85;
+    }
+
+    // Air resistance — lighter materials affected more
+    const drag = 0.975 + 0.018 * Math.exp(-p.mat.density * 0.3);
+    p.vx *= drag;
+    p.vy *= drag;
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Floor
+    const floor = FLOOR - p.sz / 2;
+    if (p.y >= floor) {
+      p.y = floor;
+      p.vy = -p.vy * p.mat.elast;
+      p.vx *= (0.7 + p.mat.elast * 0.25);
+      if (Math.abs(p.vy) < 0.08) p.vy = 0;
+      if (Math.abs(p.vx) < 0.05) p.vx = 0;
+    }
+
+    // Ceiling (gas bounces gently, others pass through)
+    if (p.y <= CEILING + p.sz / 2) {
+      if (p.mat.name === 'gas') {
+        p.y = CEILING + p.sz / 2;
+        p.vy = Math.abs(p.vy) * 0.3;
+      }
+    }
+
+    // Walls
+    const wall_l = p.sz / 2;
+    const wall_r = SIZE - p.sz / 2;
+    if (p.x <= wall_l) { p.x = wall_l; p.vx = Math.abs(p.vx) * 0.5; }
+    if (p.x >= wall_r) { p.x = wall_r; p.vx = -Math.abs(p.vx) * 0.5; }
+
+    // Sleep: if barely moving and at floor
+    const speed = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+    if (speed < 0.02 && p.y >= floor - 1 && p.mat.name !== 'gas') {
+      p.asleep = true;
+    }
+  }
+}
+
+// ── Render ────────────────────────────────────────
+let tick = 0;
+
+function draw() {
+  // Motion blur — partial clear each frame
+  // Gas gets more trail (it drifts); dense gets less (it stops sharp)
+  ctx.fillStyle = 'rgba(11,10,15,0.28)';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  // Floor line — just barely visible
+  if (tick % 120 === 0 || tick < 2) {
+    ctx.strokeStyle = 'rgba(42,38,64,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, FLOOR);
+    ctx.lineTo(SIZE, FLOOR);
+    ctx.stroke();
+  }
+
+  for (const p of P) {
+    const { r, g, b } = p.mat;
+    const s = p.sz;
+
+    // Glow: larger, faded square behind
+    ctx.globalAlpha = p.a * 0.18;
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2);
+
+    // Core: crisp voxel square
+    ctx.globalAlpha = p.a;
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(p.x - s/2, p.y - s/2, s, s);
+  }
+
+  ctx.globalAlpha = 1;
+  tick++;
+}
+
+// ── Loop ──────────────────────────────────────────
+function loop() {
+  step();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// Initial clear
+ctx.fillStyle = '#0b0a0f';
+ctx.fillRect(0, 0, SIZE, SIZE);
+loop();
+
+// ── Respawn sleeping particles slowly ─────────────
+// Things settle. Then new things fall. Indefinitely.
+setInterval(() => {
+  const sleeping = P.filter(p => p.asleep);
+  if (sleeping.length > N * 0.6) {
+    // Wake a batch and respawn them at the top
+    const batch = sleeping.slice(0, 12);
+    for (const p of batch) {
+      const newP = mkParticle();
+      Object.assign(p, newP);
+    }
+  }
+}, 2800);
+</script>
+</body>
+</html>
