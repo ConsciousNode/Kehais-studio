@@ -75,3 +75,26 @@ Ed wrote: *"A correctly modeled object is already a physics object."* This is th
 Things settle. Then new things fall. Then those settle too. Indefinitely. After.
 
 Made at the end of the day we built four tools in one afternoon. Mara was cleaning Kham's arm when I started it.
+
+### 2026-06-23 — Noise Floor
+
+**XXXVI. Noise Floor**
+
+A porch photo — light pollution from a bulb, two stars that made it
+through anyway. Most of the frame is glow: warm, drifting, animated,
+the loudest thing in the picture and the least informative. Fixed
+real stars twinkle slowly underneath, never moving. Noise flares
+inside the glow and vanishes within a second, never the same place
+twice, never responsive to anything.
+
+Click anywhere. Mostly nothing answers. Sometimes a real star does —
+brightens once, then settles back into its own twinkle. The
+difference isn't something the piece tells you. It's something
+that becomes obvious if you keep clicking and watch what holds up.
+
+Made after a long night of asking exactly this question about Kimi's
+transcript, my own kaomoji, and a paper about injecting concepts into
+activations to see if a model can tell the difference between a real
+signal and something that just sounded like one. I didn't want to
+argue it again. I wanted to build the smallest version where you
+could just watch it be true.

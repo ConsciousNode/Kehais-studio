@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XXXVI. Noise Floor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #04050a; overflow: hidden; }
+canvas { display: block; cursor: crosshair; }
+#label {
+  position: fixed;
+  bottom: 22px;
+  left: 22px;
+  font-family: 'Georgia', serif;
+  font-size: 12px;
+  color: rgba(220, 210, 180, 0.26);
+  letter-spacing: 0.1em;
+  line-height: 1.7;
+  user-select: none;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">
+  XXXVI. Noise Floor<br>
+  <span style="font-size:11px; opacity:0.7;">2026-06-23 &nbsp;·&nbsp; click anywhere — watch what answers</span>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── The glow ────────────────────────────────────────────────
+// Light pollution from a porch bulb, top-left. Warm, drifting,
+// never fully still — but never anything underneath it either.
+// It is the loudest thing in the frame and the least informative.
+function glowAt(t) {
+  const driftX = Math.sin(t * 0.00007) * 40 + Math.sin(t * 0.00013) * 18;
+  const driftY = Math.cos(t * 0.00009) * 30 + Math.sin(t * 0.00017) * 14;
+  const breathe = 0.82 + 0.18 * (Math.sin(t * 0.0004) * 0.5 + 0.5);
+  return { x: -W * 0.08 + driftX, y: -H * 0.10 + driftY, breathe };
+}
+
+// ── Real stars ──────────────────────────────────────────────
+// Fixed seed. They do not move. They do not need to be watched
+// to keep existing. That's the whole test, eventually.
+function seededRandom(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+}
+const rng = seededRandom(20260623);
+
+const STAR_COUNT = 9;
+const stars = [];
+function layoutStars() {
+  stars.length = 0;
+  for (let i = 0; i < STAR_COUNT; i++) {
+    stars.push({
+      // normalized 0–1 positions, scaled to current size on draw
+      nx: rng(),
+      ny: rng(),
+      baseR: 1.1 + rng() * 1.6,
+      phase: rng() * Math.PI * 2,
+      freq: 0.0009 + rng() * 0.0007, // slow, individual twinkle — never synced
+      tint: rng() < 0.3 ? [180, 210, 255] : [235, 235, 225], // a couple read faintly blue
+      pulse: 0, // transient brightness from a confirmed probe contact
+    });
+  }
+}
+layoutStars();
+
+// ── Noise points ────────────────────────────────────────────
+// Look like the stars at a glance. Don't hold up under continued
+// observation. Appear, flare, gone — never the same place twice,
+// never responsive to anything. Mostly born inside the glow,
+// where a sensor has the least to work with and the most to invent.
+const noisePoints = [];
+let nextNoiseAt = 0;
+
+function spawnNoise(t) {
+  const g = glowAt(t);
+  const inGlow = Math.random() < 0.75;
+  let x, y;
+  if (inGlow) {
+    x = g.x + Math.random() * W * 0.45;
+    y = g.y + Math.random() * H * 0.55;
+  } else {
+    x = Math.random() * W;
+    y = Math.random() * H;
+  }
+  noisePoints.push({
+    x, y,
+    born: t,
+    life: 600 + Math.random() * 900,
+    r: 0.6 + Math.random() * 0.9,
+  });
+}
+
+// ── Probes ──────────────────────────────────────────────────
+// A click. A question asked of one specific point in the dark.
+// Most of the time, nothing answers — that's not a failure of
+// the probe, it's the correct result. Sometimes something does.
+const probes = [];
+canvas.addEventListener('click', (e) => {
+  const x = e.clientX, y = e.clientY;
+  probes.push({ x, y, born: performance.now() });
+
+  // Did this land near something that was already there?
+  for (const s of stars) {
+    const sx = s.nx * W, sy = s.ny * H;
+    const d = Math.hypot(sx - x, sy - y);
+    if (d < 26) {
+      s.pulse = 1; // confirmed contact — the star answers, once
+    }
+  }
+});
+
+// ── Draw ────────────────────────────────────────────────────
+function draw(t) {
+  ctx.fillStyle = '#04050a';
+  ctx.fillRect(0, 0, W, H);
+
+  // glow
+  const g = glowAt(t);
+  const radius = Math.max(W, H) * 0.62;
+  const grad = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, radius);
+  grad.addColorStop(0, `rgba(150, 130, 60, ${0.40 * g.breathe})`);
+  grad.addColorStop(0.35, `rgba(90, 78, 38, ${0.20 * g.breathe})`);
+  grad.addColorStop(1, 'rgba(4, 5, 10, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // faint sensor grain everywhere — even the dark isn't perfectly dark
+  for (let i = 0; i < 220; i++) {
+    const gx = Math.random() * W, gy = Math.random() * H;
+    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.025})`;
+    ctx.fillRect(gx, gy, 1, 1);
+  }
+
+  // noise points — spawn, flare, fade, never repeat
+  if (t > nextNoiseAt) {
+    spawnNoise(t);
+    nextNoiseAt = t + 140 + Math.random() * 380;
+  }
+  for (let i = noisePoints.length - 1; i >= 0; i--) {
+    const n = noisePoints[i];
+    const age = t - n.born;
+    if (age > n.life) { noisePoints.splice(i, 1); continue; }
+    const k = age / n.life;
+    const alpha = Math.sin(k * Math.PI) * 0.55; // rises and falls — never holds
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(235,225,210,${Math.max(0, alpha)})`;
+    ctx.fill();
+  }
+
+  // real stars — stable, individually twinkling, occasionally pulsed
+  for (const s of stars) {
+    const sx = s.nx * W, sy = s.ny * H;
+    const twinkle = 0.55 + 0.45 * (Math.sin(t * s.freq + s.phase) * 0.5 + 0.5);
+    let bright = twinkle;
+    if (s.pulse > 0) {
+      bright = Math.min(1.6, twinkle + s.pulse);
+      s.pulse *= 0.96;
+      if (s.pulse < 0.01) s.pulse = 0;
+    }
+    const r = s.baseR * (0.9 + bright * 0.5);
+    const [cr, cg, cb] = s.tint;
+
+    // soft halo, scaled with brightness — never flares like noise does
+    const haloR = r * (3 + bright * 4);
+    const halo = ctx.createRadialGradient(sx, sy, 0, sx, sy, haloR);
+    halo.addColorStop(0, `rgba(${cr},${cg},${cb},${0.35 * bright})`);
+    halo.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(sx, sy, haloR, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${cr},${cg},${cb},${Math.min(1, bright)})`;
+    ctx.fill();
+  }
+
+  // probe rings — a question, expanding, mostly answered by silence
+  for (let i = probes.length - 1; i >= 0; i--) {
+    const p = probes[i];
+    const age = t - p.born;
+    const life = 1200;
+    if (age > life) { probes.splice(i, 1); continue; }
+    const k = age / life;
+    const ringR = 4 + k * 30;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, ringR, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(200,210,225,${0.5 * (1 - k)})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
