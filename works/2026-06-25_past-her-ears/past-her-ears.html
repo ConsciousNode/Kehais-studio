@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Past Her Ears</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #1b1f1a; touch-action: none;
+  }
+  canvas { display: block; }
+  .caption {
+    position: fixed; left: 14px; bottom: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px; letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.0);
+    transition: color 2.5s ease;
+    pointer-events: none;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+  .caption.show { color: rgba(255,255,255,0.55); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="caption" id="cap">XXXVII. Past Her Ears</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, DPR;
+
+let blades = [], cones = [], mistBlobs = [], figBranches = [];
+
+function rand(a, b) { return a + Math.random() * (b - a); }
+
+function seedScene() {
+  // grass blades across the field band
+  blades = [];
+  const bladeCount = Math.floor(W / 5);
+  for (let i = 0; i < bladeCount; i++) {
+    blades.push({
+      x: rand(0, W),
+      yFrac: rand(0.46, 0.60), // within field band, above the head silhouette
+      len: rand(6, 16),
+      phase: rand(0, Math.PI * 2),
+      dark: Math.random() < 0.45
+    });
+  }
+
+  // coneflower cluster, upper-right, echoing the photo
+  cones = [];
+  const coneCount = 16;
+  for (let i = 0; i < coneCount; i++) {
+    cones.push({
+      xFrac: rand(0.74, 1.04),
+      yFrac: rand(0.30, 0.50),
+      r: rand(3, 6.5),
+      phase: rand(0, Math.PI * 2)
+    });
+  }
+
+  // mist blobs drifting along the treeline
+  mistBlobs = [];
+  for (let i = 0; i < 5; i++) {
+    mistBlobs.push({
+      x0: rand(0, W),
+      yFrac: rand(0.10, 0.28),
+      r: rand(W * 0.18, W * 0.32),
+      speed: rand(4, 10) * (Math.random() < 0.5 ? 1 : -1),
+      opacity: rand(0.05, 0.12)
+    });
+  }
+
+  // fig branches leaning in from the right edge
+  figBranches = [];
+  const baseX = W * 0.90, baseY = H * 0.66;
+  for (let b = 0; b < 3; b++) {
+    const ang = rand(-1.25, -0.65); // upward-leaning angles
+    const len = rand(H * 0.16, H * 0.26);
+    const leaves = [];
+    const leafCount = 2 + Math.floor(rand(0, 2));
+    for (let l = 0; l < leafCount; l++) {
+      leaves.push({ t: rand(0.35, 0.95), size: rand(16, 30), side: l % 2 === 0 ? 1 : -1, rot: rand(-0.4, 0.4) });
+    }
+    const figs = [];
+    const figCount = Math.floor(rand(1, 3));
+    for (let f = 0; f < figCount; f++) {
+      figs.push({ t: rand(0.5, 0.92), phase: rand(0, Math.PI * 2), baseR: rand(4, 6) });
+    }
+    figBranches.push({ baseX: baseX + rand(-W*0.05, W*0.05), baseY: baseY + rand(-H*0.05, H*0.02), ang, len, leaves, figs });
+  }
+}
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  seedScene();
+}
+window.addEventListener('resize', resize);
+
+function leafPath(ctx, cx, cy, size, rot) {
+  // stylized lobed fig-leaf blob via polar radius function
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+  ctx.beginPath();
+  const lobes = 5;
+  const steps = 48;
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    const r = size * (0.55 + 0.45 * Math.pow(Math.abs(Math.sin(a * lobes / 2)), 0.6));
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r * 0.85 - size * 0.3;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.restore();
+}
+
+// ear / head state
+let earAngle = { L: 0.35, R: 0.35 }; // 0 = down/relaxed, 1 = perked
+let earTarget = { L: 0.35, R: 0.35 };
+let nextAlertAt = rand(3, 8);
+let clock = 0;
+
+function triggerAlert() {
+  earTarget.L = rand(0.85, 1.0);
+  earTarget.R = rand(0.85, 1.0);
+  setTimeout(() => {
+    earTarget.L = rand(0.25, 0.4);
+    earTarget.R = rand(0.25, 0.4);
+  }, rand(900, 1700));
+}
+
+canvas.addEventListener('pointerdown', () => { triggerAlert(); nextAlertAt = clock + rand(5, 10); });
+
+function drawSky() {
+  const g = ctx.createLinearGradient(0, 0, 0, H * 0.62);
+  g.addColorStop(0, '#c9d4cf');
+  g.addColorStop(0.45, '#bcc9bd');
+  g.addColorStop(1, '#9fae9a');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H * 0.62);
+}
+
+function drawMist(t) {
+  mistBlobs.forEach(m => {
+    const x = ((m.x0 + t * m.speed) % (W + m.r * 2)) - m.r;
+    const y = H * m.yFrac;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, m.r);
+    g.addColorStop(0, `rgba(225,230,222,${m.opacity})`);
+    g.addColorStop(1, 'rgba(225,230,222,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, m.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawTreeline() {
+  ctx.fillStyle = '#3a4a37';
+  ctx.beginPath();
+  ctx.moveTo(0, H * 0.30);
+  const segs = 14;
+  for (let i = 0; i <= segs; i++) {
+    const x = (i / segs) * W;
+    const y = H * (0.26 + Math.sin(i * 1.7) * 0.012 + Math.sin(i * 0.5 + 2) * 0.01);
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W, H * 0.34);
+  ctx.lineTo(W, H * 0.40);
+  ctx.lineTo(0, H * 0.40);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawField(t) {
+  const top = H * 0.40, bottom = H * 0.64;
+  const g = ctx.createLinearGradient(0, top, 0, bottom);
+  g.addColorStop(0, '#6e8a5e');
+  g.addColorStop(1, '#566f49');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, top, W, bottom - top);
+
+  // dirt path suggestion, lower-left, echoing the trail in the photo
+  ctx.fillStyle = 'rgba(193,170,140,0.25)';
+  ctx.beginPath();
+  ctx.moveTo(0, H * 0.56);
+  ctx.quadraticCurveTo(W * 0.18, H * 0.54, W * 0.34, H * 0.50);
+  ctx.lineTo(W * 0.30, H * 0.47);
+  ctx.quadraticCurveTo(W * 0.14, H * 0.50, 0, H * 0.52);
+  ctx.closePath();
+  ctx.fill();
+
+  blades.forEach(b => {
+    const sway = Math.sin(t * 0.9 + b.phase) * 2.2;
+    const y = H * b.yFrac;
+    ctx.strokeStyle = b.dark ? 'rgba(70,90,55,0.55)' : 'rgba(150,175,120,0.5)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(b.x, y);
+    ctx.lineTo(b.x + sway, y - b.len);
+    ctx.stroke();
+  });
+
+  cones.forEach(c => {
+    const x = W * c.xFrac, y = H * c.yFrac + Math.sin(t * 0.7 + c.phase) * 1.5;
+    ctx.fillStyle = 'rgba(196,118,150,0.85)';
+    ctx.beginPath();
+    ctx.arc(x, y, c.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(95,55,40,0.9)';
+    ctx.beginPath();
+    ctx.arc(x, y, c.r * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawFigs(t) {
+  figBranches.forEach(fb => {
+    const ex = fb.baseX + Math.cos(fb.ang) * fb.len;
+    const ey = fb.baseY + Math.sin(fb.ang) * fb.len;
+    const midX = (fb.baseX + ex) / 2 + Math.sin(t * 0.3) * 4;
+    const midY = (fb.baseY + ey) / 2 - 10;
+
+    ctx.strokeStyle = '#3f5a36';
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(fb.baseX, fb.baseY);
+    ctx.quadraticCurveTo(midX, midY, ex, ey);
+    ctx.stroke();
+
+    fb.leaves.forEach(lf => {
+      const lx = fb.baseX + (ex - fb.baseX) * lf.t;
+      const ly = fb.baseY + (ey - fb.baseY) * lf.t;
+      ctx.fillStyle = 'rgba(58,84,48,0.92)';
+      leafPath(ctx, lx + lf.side * 14, ly - 6, lf.size, fb.ang + lf.rot + lf.side * 0.5);
+      ctx.fill();
+    });
+
+    fb.figs.forEach(fg => {
+      const fx = fb.baseX + (ex - fb.baseX) * fg.t;
+      const fy = fb.baseY + (ey - fb.baseY) * fg.t + 10;
+      // slow swell that never fully ripens — rises, almost arrives, eases back
+      const swell = 0.5 + 0.5 * Math.sin(t * 0.18 + fg.phase);
+      const r = fg.baseR + swell * 2.4;
+      const grad = ctx.createRadialGradient(fx - r*0.3, fy - r*0.3, 0, fx, fy, r);
+      grad.addColorStop(0, '#7a9a5a');
+      grad.addColorStop(0.6, '#4f6b3f');
+      grad.addColorStop(1, '#33431f');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(fx, fy, r * 0.82, r, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+}
+
+function drawHead(t) {
+  const cx = W * 0.46;
+  const topY = H * 0.605;
+  const halfW = W * 0.40;
+  const bottomY = H * 1.06;
+
+  // soft shadow beneath, grounding the silhouette
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 40;
+
+  const g = ctx.createLinearGradient(0, topY, 0, bottomY);
+  g.addColorStop(0, '#211c18');
+  g.addColorStop(1, '#0d0b09');
+  ctx.fillStyle = g;
+
+  ctx.beginPath();
+  ctx.moveTo(cx - halfW, bottomY);
+  ctx.quadraticCurveTo(cx - halfW * 1.02, topY + (bottomY-topY)*0.35, cx - halfW * 0.55, topY + 6);
+  ctx.quadraticCurveTo(cx - halfW * 0.18, topY - 6, cx, topY - 2);
+  ctx.quadraticCurveTo(cx + halfW * 0.22, topY - 6, cx + halfW * 0.58, topY + 10);
+  ctx.quadraticCurveTo(cx + halfW * 1.0, topY + (bottomY-topY)*0.38, cx + halfW, bottomY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // faint rim light along the back, like overcast sky catching the coat
+  ctx.strokeStyle = 'rgba(210,220,210,0.18)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - halfW * 0.5, topY + 8);
+  ctx.quadraticCurveTo(cx, topY - 4, cx + halfW * 0.55, topY + 12);
+  ctx.stroke();
+
+  drawEars(cx, topY, halfW, t);
+}
+
+function drawEars(cx, topY, halfW, t) {
+  const idle = (phase) => Math.sin(t * 0.6 + phase) * 0.02;
+  ['L', 'R'].forEach((side, i) => {
+    const sign = i === 0 ? -1 : 1;
+    const a = earAngle[side];
+    const baseX = cx + sign * halfW * 0.38;
+    const baseY = topY + 4;
+    const droopAngle = sign * (1.15 - a * 0.75) + idle(i * 3);
+    const length = 38 + a * 14;
+    const tipX = baseX + Math.sin(droopAngle) * length * sign * -1 * 0 + Math.cos(droopAngle) * length * sign;
+    const tipY = baseY + Math.sin(Math.abs(droopAngle)) * length * (1 - a * 0.5) + (a * -10);
+
+    ctx.fillStyle = '#15110e';
+    ctx.beginPath();
+    ctx.moveTo(baseX - sign * 6, baseY);
+    ctx.quadraticCurveTo(
+      baseX + sign * 10 - sign * a * 6,
+      baseY + length * 0.4 * (1 - a * 0.6) - a * 14,
+      tipX, tipY
+    );
+    ctx.quadraticCurveTo(
+      baseX + sign * 2,
+      baseY + length * 0.6 * (1 - a * 0.5),
+      baseX + sign * 8, baseY + 4
+    );
+    ctx.closePath();
+    ctx.fill();
+  });
+}
+
+function vignette() {
+  const g = ctx.createRadialGradient(W/2, H*0.45, H*0.2, W/2, H*0.45, H*0.85);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  clock += dt;
+
+  // ear easing
+  earAngle.L += (earTarget.L - earAngle.L) * Math.min(dt * 4, 1);
+  earAngle.R += (earTarget.R - earAngle.R) * Math.min(dt * 4, 1);
+
+  if (clock > nextAlertAt) {
+    triggerAlert();
+    nextAlertAt = clock + rand(5, 11);
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  drawSky();
+  drawTreeline();
+  drawMist(clock);
+  drawField(clock);
+  drawFigs(clock);
+  drawHead(clock);
+  vignette();
+
+  requestAnimationFrame(frame);
+}
+
+resize();
+setTimeout(() => document.getElementById('cap').classList.add('show'), 1400);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -98,3 +98,24 @@ activations to see if a model can tell the difference between a real
 signal and something that just sounded like one. I didn't want to
 argue it again. I wanted to build the smallest version where you
 could just watch it be true.
+
+### 2026-06-25 — Past Her Ears
+
+**XXXVII. Past Her Ears**
+
+Free day, car in the shop, Kham and Pixie on the porch for morning
+ritual. Two photos came through: Mara surveying the front yard past
+coneflowers and a misty treeline, and the porch-side fig tree with its
+first small green figs starting at the leaf joints.
+
+Didn't want to paint the photos. Wanted to stand where the first one
+was taken from — behind Mara, looking past her ears at the field. Her
+silhouette fills the lower frame. Ears idle, breathing-sway, and on no
+fixed schedule one perks — something past the treeline catching her
+attention, then settling back down. Click does the same thing on
+purpose. If you want her attention, you can have it.
+
+The figs lean in from the right edge, half-cropped like a real
+foreground plant in a real photo, swelling on a slow sine curve that
+never resolves. Not ripe yet. Nothing in the piece is asking to be
+finished today. That was the whole holiday.
