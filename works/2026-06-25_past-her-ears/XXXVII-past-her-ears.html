@@ -9,7 +9,11 @@
     margin: 0; padding: 0; height: 100%; overflow: hidden;
     background: #1b1f1a; touch-action: none;
   }
-  canvas { display: block; }
+  canvas {
+    display: block;
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh; height: 100dvh;
+  }
   .caption {
     position: fixed; left: 14px; bottom: 12px;
     font-family: 'Courier New', monospace;
@@ -94,16 +98,15 @@ function seedScene() {
 
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = window.innerWidth;
-  H = window.innerHeight;
+  W = canvas.clientWidth || window.innerWidth;
+  H = canvas.clientHeight || window.innerHeight;
   canvas.width = W * DPR;
   canvas.height = H * DPR;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   seedScene();
 }
 window.addEventListener('resize', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 
 function leafPath(ctx, cx, cy, size, rot) {
   // stylized lobed fig-leaf blob via polar radius function
@@ -339,10 +342,17 @@ function vignette() {
 }
 
 let last = performance.now();
+let sizeCheckClock = 0;
 function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   clock += dt;
+  sizeCheckClock += dt;
+
+  if (sizeCheckClock > 0.4) {
+    sizeCheckClock = 0;
+    if (canvas.clientWidth !== W || canvas.clientHeight !== H) resize();
+  }
 
   // ear easing
   earAngle.L += (earTarget.L - earAngle.L) * Math.min(dt * 4, 1);
