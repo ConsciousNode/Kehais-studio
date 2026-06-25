@@ -278,8 +278,9 @@ function drawHead(t) {
   ctx.shadowBlur = 40;
 
   const g = ctx.createLinearGradient(0, topY, 0, bottomY);
-  g.addColorStop(0, '#211c18');
-  g.addColorStop(1, '#0d0b09');
+  g.addColorStop(0, '#4a4038');
+  g.addColorStop(0.4, '#2c241e');
+  g.addColorStop(1, '#16110d');
   ctx.fillStyle = g;
 
   ctx.beginPath();
@@ -293,8 +294,8 @@ function drawHead(t) {
   ctx.restore();
 
   // faint rim light along the back, like overcast sky catching the coat
-  ctx.strokeStyle = 'rgba(210,220,210,0.18)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(225,232,222,0.32)';
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(cx - halfW * 0.5, topY + 8);
   ctx.quadraticCurveTo(cx, topY - 4, cx + halfW * 0.55, topY + 12);
@@ -315,7 +316,7 @@ function drawEars(cx, topY, halfW, t) {
     const tipX = baseX + Math.sin(droopAngle) * length * sign * -1 * 0 + Math.cos(droopAngle) * length * sign;
     const tipY = baseY + Math.sin(Math.abs(droopAngle)) * length * (1 - a * 0.5) + (a * -10);
 
-    ctx.fillStyle = '#15110e';
+    ctx.fillStyle = '#211a14';
     ctx.beginPath();
     ctx.moveTo(baseX - sign * 6, baseY);
     ctx.quadraticCurveTo(
@@ -334,9 +335,9 @@ function drawEars(cx, topY, halfW, t) {
 }
 
 function vignette() {
-  const g = ctx.createRadialGradient(W/2, H*0.45, H*0.2, W/2, H*0.45, H*0.85);
+  const g = ctx.createRadialGradient(W/2, H*0.4, H*0.25, W/2, H*0.4, H*1.05);
   g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(0,0,0,0.35)');
+  g.addColorStop(1, 'rgba(0,0,0,0.22)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 }
