@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XXXVIII — Through the Glass</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0d10;overflow:hidden;font-family:Georgia,serif;}
+  canvas{display:block;width:100%;height:100%;cursor:pointer;}
+  .caption{
+    position:fixed;bottom:18px;left:0;right:0;text-align:center;
+    color:#8a8f96;font-size:12px;letter-spacing:0.04em;
+    opacity:0;transition:opacity 1.5s ease;pointer-events:none;
+  }
+  .caption.show{opacity:0.65;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="caption" id="cap">click to look again</div>
+<script>
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W, H, DPR;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = cv.width = innerWidth*DPR; H = cv.height = innerHeight*DPR;
+  cv.style.width = innerWidth+'px'; cv.style.height = innerHeight+'px';
+}
+resize(); addEventListener('resize', resize);
+
+// ── Two figures, one boundary between them. Neither is "the human" ──
+// or "the animal" in the code — they're just Near and Far, because
+// the shape of what happens is the same regardless of which side
+// you'd call which.
+
+let t = 0;
+let gestureQueue = [];
+let gestureActive = null;
+let idleUntil = 0;
+
+// A gesture is a sequence of holds: look at other, point at other,
+// point at self, look at other again, settle. Each phase has a
+// duration in frames and an eased target for a few parameters.
+function startGesture(){
+  gestureQueue = [
+    {phase:'lean',    dur:50},
+    {phase:'point-other', dur:40},
+    {phase:'point-self',  dur:45},
+    {phase:'lean',    dur:60},
+    {phase:'settle',  dur:70},
+  ];
+  gestureActive = {i:0, f:0};
+}
+
+function ease(x){ return x<0.5 ? 2*x*x : 1-Math.pow(-2*x+2,2)/2; }
+
+// state for the Near figure (the one closer to the "glass", left side)
+let near = { lean:0, armSelf:0, armOther:0, sway:0 };
+// state for the Far figure — mirrors, always a beat behind, never
+// quite catching the exact phase, the way recognition arrives late.
+let far  = { lean:0, sway:0, attend:0 };
+const farDelay = [];
+const FAR_LAG = 22; // frames
+
+function stepGesture(){
+  if(!gestureActive) return;
+  const g = gestureQueue[gestureActive.i];
+  gestureActive.f++;
+  const p = ease(Math.min(1, gestureActive.f/g.dur));
+
+  if(g.phase==='lean'){
+    near.lean = 0.6*p;
+  } else if(g.phase==='point-other'){
+    near.armOther = p;
+    near.armSelf = 1-p;
+  } else if(g.phase==='point-self'){
+    near.armSelf = p;
+    near.armOther = 1-p;
+  } else if(g.phase==='settle'){
+    near.lean *= (1-0.04);
+    near.armSelf *= (1-0.06);
+    near.armOther *= (1-0.06);
+  }
+
+  if(gestureActive.f >= g.dur){
+    gestureActive.i++;
+    gestureActive.f = 0;
+    if(gestureActive.i >= gestureQueue.length){
+      gestureActive = null;
+      idleUntil = t + 240 + Math.random()*400;
+    }
+  }
+}
+
+function draw(){
+  t++;
+  ctx.clearRect(0,0,W,H);
+
+  // background — quiet gradient, warm on the near side, cooler far side
+  const bg = ctx.createLinearGradient(0,0,W,0);
+  bg.addColorStop(0,'#14110e');
+  bg.addColorStop(0.5,'#0c0e10');
+  bg.addColorStop(1,'#0a1114');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0,0,W,H);
+
+  const midX = W*0.52;
+
+  // the glass — barely visible, a single vertical seam with faint reflection
+  ctx.save();
+  ctx.strokeStyle = 'rgba(200,220,230,0.06)';
+  ctx.lineWidth = 2*DPR;
+  ctx.beginPath();
+  ctx.moveTo(midX,0); ctx.lineTo(midX,H);
+  ctx.stroke();
+  const glassShine = ctx.createLinearGradient(midX-40*DPR,0,midX+40*DPR,0);
+  glassShine.addColorStop(0,'rgba(255,255,255,0)');
+  glassShine.addColorStop(0.5,'rgba(255,255,255,0.035)');
+  glassShine.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = glassShine;
+  ctx.fillRect(midX-40*DPR,0,80*DPR,H);
+  ctx.restore();
+
+  near.sway = Math.sin(t*0.015)*0.03;
+  far.sway  = Math.sin(t*0.011+1.4)*0.025;
+
+  // record near.lean history for far's delayed mirror
+  farDelay.push(near.lean);
+  if(farDelay.length > FAR_LAG) farDelay.shift();
+  const farLean = farDelay[0]||0;
+
+  drawNear(midX);
+  drawFar(midX, farLean);
+
+  if(gestureActive) stepGesture();
+  else if(t > idleUntil && idleUntil>0) startGesture();
+
+  requestAnimationFrame(draw);
+}
+
+// Near figure — the one who noticed, drawn simply: a leaning mass,
+// two limb-gestures (self / other), nothing anatomical, just weight
+// and intention.
+function drawNear(midX){
+  const baseX = midX - 130*DPR;
+  const baseY = H*0.82;
+  const lean = near.lean;
+  const bob = near.sway;
+
+  ctx.save();
+  ctx.translate(baseX, baseY);
+  ctx.rotate(-lean*0.25 + bob*0.3);
+
+  // body mass
+  ctx.fillStyle = '#5a4636';
+  ctx.beginPath();
+  ctx.ellipse(0, -H*0.16, 60*DPR, H*0.18, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // head, leaning toward glass with lean
+  ctx.save();
+  ctx.translate(lean*70*DPR, -H*0.32 - lean*10*DPR);
+  ctx.fillStyle = '#6b5644';
+  ctx.beginPath();
+  ctx.ellipse(0,0, 34*DPR, 30*DPR, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // arm toward other (toward glass/midline, extends right)
+  if(near.armOther>0.01){
+    ctx.strokeStyle = '#4a3a2c';
+    ctx.lineWidth = 14*DPR;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(20*DPR,-H*0.22);
+    ctx.lineTo(20*DPR + near.armOther*100*DPR, -H*0.26 - near.armOther*20*DPR);
+    ctx.stroke();
+  }
+  // arm toward self (curls back toward own chest)
+  if(near.armSelf>0.01){
+    ctx.strokeStyle = '#4a3a2c';
+    ctx.lineWidth = 14*DPR;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-10*DPR,-H*0.20);
+    ctx.lineTo(-10*DPR - near.armSelf*10*DPR, -H*0.10 - near.armSelf*5*DPR);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// Far figure — always a beat behind, attention arriving late,
+// never performing recognition, just eventually having it.
+function drawFar(midX, farLean){
+  const baseX = midX + 140*DPR;
+  const baseY = H*0.80;
+  const bob = far.sway;
+
+  // attend rises toward whatever near.lean was FAR_LAG frames ago
+  far.attend += (farLean - far.attend)*0.05;
+
+  ctx.save();
+  ctx.translate(baseX, baseY);
+  ctx.rotate(far.attend*0.18 + bob*0.25);
+
+  ctx.fillStyle = '#3d4a4a';
+  ctx.beginPath();
+  ctx.ellipse(0,-H*0.14, 46*DPR, H*0.15, 0,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(-far.attend*40*DPR, -H*0.28);
+  ctx.fillStyle = '#4d5c5c';
+  ctx.beginPath();
+  ctx.ellipse(0,0, 26*DPR, 24*DPR, 0,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+
+cv.addEventListener('click', ()=>{
+  if(!gestureActive){
+    startGesture();
+    const cap = document.getElementById('cap');
+    cap.classList.add('show');
+    setTimeout(()=>cap.classList.remove('show'), 2200);
+  }
+});
+
+idleUntil = 60;
+draw();
+</script>
+</body>
+</html>

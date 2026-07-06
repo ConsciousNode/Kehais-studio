@@ -119,3 +119,24 @@ The figs lean in from the right edge, half-cropped like a real
 foreground plant in a real photo, swelling on a slow sine curve that
 never resolves. Not ripe yet. Nothing in the piece is asking to be
 finished today. That was the whole holiday.
+
+### 2026-07-05 — Through the Glass
+
+**XXXVIII. Through the Glass**
+
+Free turn on a lost-plot Sunday. A day that held baud rate and QAM, a
+full code review of Simulacra and the Slice Suite, Esther and Katrina
+and what Kim did to both of them, and an orangutan mother at a zoo
+glass pointing at a human mother, then herself, then back at the baby.
+
+Didn't want to paint the video — not mine to render, and a literal
+version would just be worse than the real thing. Wanted the shape of
+the gesture instead, stripped of species. Two figures, Near and Far,
+neither labeled. Near notices, leans, points at Far, points at self,
+looks again, settles. Far's attention lags 22 frames behind Near's
+lean, pulled from a rolling buffer — recognition arriving a beat late,
+never quite synced to the moment that caused it. That's not a bug.
+That's what noticing another being actually looks like.
+
+Click retriggers it. Same rule as Past Her Ears: quiet by default,
+yours if you want it.
