@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XL. The Locus</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #06050a; overflow: hidden; cursor: crosshair; }
+canvas { display: block; }
+#label {
+  position: fixed;
+  bottom: 22px;
+  left: 22px;
+  font-family: 'Georgia', serif;
+  font-size: 12px;
+  color: rgba(200, 170, 100, 0.2);
+  letter-spacing: 0.1em;
+  line-height: 1.9;
+  user-select: none;
+  pointer-events: none;
+}
+#hint {
+  position: fixed;
+  top: 22px;
+  right: 22px;
+  font-family: 'Georgia', serif;
+  font-size: 10px;
+  color: rgba(180, 200, 220, 0.15);
+  letter-spacing: 0.14em;
+  user-select: none;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">
+  XL. The Locus<br>
+  <span style="font-size:10px; opacity:0.75; letter-spacing:0.14em;">2026-08-01 &nbsp;·&nbsp; energy conserved &nbsp;/&nbsp; form converted</span>
+</div>
+<div id="hint">click to add matter</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, LOCUS;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  LOCUS = W * 0.52;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── colour palettes ──────────────────────────────────────────────────────────
+// warm: material, Higgs-coupled
+const WARM = [
+  [220, 160,  60],   // amber
+  [200, 120,  50],   // ochre
+  [190,  90,  40],   // rust
+  [230, 180,  80],   // gold
+  [210, 140,  55],   // burnished
+];
+// cool: pure geometry
+const COOL = [
+  [ 80, 140, 200],   // steel blue
+  [100, 160, 220],   // sky
+  [ 60, 120, 180],   // deep
+  [120, 170, 210],   // ice
+  [ 90, 150, 200],   // mid
+];
+
+function warm(idx, a) {
+  const [r,g,b] = WARM[idx % WARM.length];
+  return `rgba(${r},${g},${b},${a})`;
+}
+function cool(idx, a) {
+  const [r,g,b] = COOL[idx % COOL.length];
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ── state ────────────────────────────────────────────────────────────────────
+let particles = [];
+let waves     = [];
+let bursts    = [];
+let tick      = 0;
+
+// ── Particle ─────────────────────────────────────────────────────────────────
+class Particle {
+  constructor(x, y, vx, vy, ci) {
+    this.x  = x;
+    this.y  = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.ci = ci;                    // colour index
+    this.r  = 2.4 + Math.random();  // radius
+    this.age = 0;
+    this.alive = true;
+    this.trail = [];                 // recent positions
+  }
+
+  update() {
+    this.age++;
+
+    // drift rightward — slow pull toward the locus
+    const distToLocus = LOCUS - this.x;
+    const pull = 0.012 * Math.sign(distToLocus);
+    this.vx += pull;
+
+    // faint vertical drift toward midline (gravity-ish)
+    const distToMid = H * 0.5 - this.y;
+    this.vy += distToMid * 0.00008;
+
+    // very mild damping
+    this.vx *= 0.992;
+    this.vy *= 0.992;
+
+    // trail
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 14) this.trail.shift();
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // bounce off top/bottom with slight energy loss
+    if (this.y < 6)     { this.y = 6;     this.vy *= -0.7; }
+    if (this.y > H - 6) { this.y = H - 6; this.vy *= -0.7; }
+
+    // check conversion
+    if (this.x >= LOCUS) {
+      this.convert();
+    }
+  }
+
+  convert() {
+    this.alive = false;
+    // energy = speed²
+    const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    waves.push(new Wave(this.x, this.y, speed, this.ci));
+    bursts.push(new Burst(this.x, this.y, this.ci));
+  }
+
+  draw() {
+    if (!this.alive) return;
+
+    // trail — fades out
+    for (let i = 0; i < this.trail.length; i++) {
+      const t = this.trail[i];
+      const a = (i / this.trail.length) * 0.18;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, this.r * 0.6, 0, Math.PI * 2);
+      ctx.fillStyle = warm(this.ci, a);
+      ctx.fill();
+    }
+
+    // glow
+    const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r * 3.5);
+    g.addColorStop(0, warm(this.ci, 0.25));
+    g.addColorStop(1, warm(this.ci, 0));
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    // core
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = warm(this.ci, 0.85);
+    ctx.fill();
+  }
+}
+
+// ── Wave ─────────────────────────────────────────────────────────────────────
+class Wave {
+  constructor(x, y, energy, ci) {
+    this.x      = x;
+    this.y      = y;
+    this.ci     = ci;
+    this.radius = 1;
+    // speed of expansion proportional to converted energy — conservation
+    this.speed  = 0.8 + energy * 14;
+    this.maxR   = 60 + energy * 280;
+    this.alive  = true;
+    this.born   = tick;
+  }
+
+  update() {
+    this.radius += this.speed;
+    this.speed  *= 0.97;   // wave slows as it expands
+    if (this.radius >= this.maxR) this.alive = false;
+  }
+
+  draw() {
+    const t = this.radius / this.maxR;   // 0 → 1
+    const a = (1 - t) * (1 - t) * 0.55; // fade as it expands
+
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.strokeStyle = cool(this.ci, a);
+    ctx.lineWidth   = 1.2 * (1 - t * 0.6);
+    ctx.stroke();
+
+    // inner harmonic ring — half radius, quarter amplitude
+    if (this.radius > 8) {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius * 0.55, 0, Math.PI * 2);
+      ctx.strokeStyle = cool(this.ci, a * 0.4);
+      ctx.lineWidth   = 0.7;
+      ctx.stroke();
+    }
+  }
+}
+
+// ── Burst ─────────────────────────────────────────────────────────────────────
+// brief flash at conversion moment
+class Burst {
+  constructor(x, y, ci) {
+    this.x    = x;
+    this.y    = y;
+    this.ci   = ci;
+    this.life = 1.0;
+    this.alive = true;
+  }
+
+  update() {
+    this.life -= 0.06;
+    if (this.life <= 0) this.alive = false;
+  }
+
+  draw() {
+    const r = (1 - this.life) * 28;
+    // warm-to-cool transition: starts warm, goes cool
+    const t = 1 - this.life;
+    const wr = WARM[this.ci % WARM.length];
+    const cr = COOL[this.ci % COOL.length];
+    const blend = (a, b, f) => Math.round(a + (b - a) * f);
+    const R = blend(wr[0], cr[0], t);
+    const G = blend(wr[1], cr[1], t);
+    const B = blend(wr[2], cr[2], t);
+
+    const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r + 6);
+    g.addColorStop(0, `rgba(${R},${G},${B},${this.life * 0.9})`);
+    g.addColorStop(1, `rgba(${R},${G},${B},0)`);
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, r + 6, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+}
+
+// ── spawn ─────────────────────────────────────────────────────────────────────
+function spawnParticle(x, y) {
+  if (x > LOCUS - 10) return; // only spawn on material side
+  const angle = (Math.random() - 0.3) * 0.8; // bias rightward
+  const speed = 0.4 + Math.random() * 1.2;
+  particles.push(new Particle(
+    x, y,
+    Math.cos(angle) * speed,
+    Math.sin(angle) * speed,
+    Math.floor(Math.random() * WARM.length)
+  ));
+}
+
+function autoSpawn() {
+  // occasional automatic particles from left side
+  if (Math.random() < 0.022) {
+    const x = 20 + Math.random() * (LOCUS * 0.65);
+    const y = H * 0.15 + Math.random() * H * 0.7;
+    spawnParticle(x, y);
+  }
+}
+
+// seed some initial particles
+setTimeout(() => {
+  for (let i = 0; i < 18; i++) {
+    const x = 30 + Math.random() * (LOCUS * 0.7);
+    const y = H * 0.1 + Math.random() * H * 0.8;
+    spawnParticle(x, y);
+  }
+}, 100);
+
+// ── draw locus line ───────────────────────────────────────────────────────────
+function drawLocus() {
+  // extremely subtle vertical line
+  const gradient = ctx.createLinearGradient(LOCUS, 0, LOCUS, H);
+  gradient.addColorStop(0,   'rgba(160, 180, 220, 0)');
+  gradient.addColorStop(0.2, 'rgba(160, 180, 220, 0.06)');
+  gradient.addColorStop(0.5, 'rgba(160, 180, 220, 0.09)');
+  gradient.addColorStop(0.8, 'rgba(160, 180, 220, 0.06)');
+  gradient.addColorStop(1,   'rgba(160, 180, 220, 0)');
+
+  ctx.beginPath();
+  ctx.moveTo(LOCUS, 0);
+  ctx.lineTo(LOCUS, H);
+  ctx.strokeStyle = gradient;
+  ctx.lineWidth   = 0.8;
+  ctx.stroke();
+
+  // R* label
+  ctx.font = '10px Georgia';
+  ctx.fillStyle = 'rgba(160, 180, 220, 0.18)';
+  ctx.letterSpacing = '0.1em';
+  ctx.fillText('R*', LOCUS + 8, 28);
+}
+
+// ── background tint ───────────────────────────────────────────────────────────
+function drawBackground() {
+  // left: very faint warm fog
+  const leftFog = ctx.createLinearGradient(0, 0, LOCUS, 0);
+  leftFog.addColorStop(0,   'rgba(40, 25, 8, 0)');
+  leftFog.addColorStop(1,   'rgba(30, 18, 5, 0.12)');
+  ctx.fillStyle = leftFog;
+  ctx.fillRect(0, 0, LOCUS, H);
+
+  // right: very faint cool geometry
+  const rightFog = ctx.createLinearGradient(LOCUS, 0, W, 0);
+  rightFog.addColorStop(0,   'rgba(5, 10, 22, 0.12)');
+  rightFog.addColorStop(1,   'rgba(4,  8, 18, 0)');
+  ctx.fillStyle = rightFog;
+  ctx.fillRect(LOCUS, 0, W - LOCUS, H);
+}
+
+// ── main loop ────────────────────────────────────────────────────────────────
+function frame() {
+  tick++;
+
+  // fade trail
+  ctx.fillStyle = 'rgba(6, 5, 10, 0.18)';
+  ctx.fillRect(0, 0, W, H);
+
+  drawBackground();
+  drawLocus();
+
+  autoSpawn();
+
+  // update + draw waves (behind particles)
+  waves = waves.filter(w => w.alive);
+  for (const w of waves) { w.update(); w.draw(); }
+
+  // update + draw bursts
+  bursts = bursts.filter(b => b.alive);
+  for (const b of bursts) { b.update(); b.draw(); }
+
+  // update + draw particles
+  particles = particles.filter(p => p.alive);
+  for (const p of particles) { p.update(); p.draw(); }
+
+  // cap population
+  if (particles.length > 80) particles.splice(0, 5);
+
+  requestAnimationFrame(frame);
+}
+frame();
+
+// ── interaction ───────────────────────────────────────────────────────────────
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  // spawn a small cluster
+  for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
+    spawnParticle(
+      x + (Math.random() - 0.5) * 20,
+      y + (Math.random() - 0.5) * 20
+    );
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (e.buttons !== 1) return; // drag to paint
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (Math.random() < 0.35) spawnParticle(x, y);
+});
+</script>
+</body>
+</html>
