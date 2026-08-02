@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XLI. Legible</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #04040a; overflow: hidden; cursor: crosshair; }
+canvas { display: block; }
+#label {
+  position: fixed;
+  bottom: 22px;
+  left: 22px;
+  font-family: 'Georgia', serif;
+  font-size: 12px;
+  color: rgba(180, 190, 220, 0.18);
+  letter-spacing: 0.1em;
+  line-height: 1.9;
+  user-select: none;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">
+  XLI. Legible<br>
+  <span style="font-size:10px; opacity:0.75; letter-spacing:0.14em;">2026-08-02 &nbsp;·&nbsp; the structure was always there</span>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+let W, H;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  init();
+}
+
+// ── territory: wave interference pattern ──────────────────────────────────────
+// computed once; never changes; always there
+let territory; // Float32Array, values in [-1, 1]
+let illumination; // Float32Array, values in [0, 1]
+
+function buildTerritory() {
+  territory    = new Float32Array(W * H);
+  illumination = new Float32Array(W * H);
+
+  // six interfering wave sources at irregular positions
+  const sources = [
+    { x: W * 0.18, y: H * 0.22, f: 0.012 },
+    { x: W * 0.72, y: H * 0.15, f: 0.014 },
+    { x: W * 0.88, y: H * 0.68, f: 0.011 },
+    { x: W * 0.12, y: H * 0.81, f: 0.013 },
+    { x: W * 0.55, y: H * 0.50, f: 0.009 },
+    { x: W * 0.38, y: H * 0.35, f: 0.016 },
+  ];
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let v = 0;
+      for (const s of sources) {
+        const dx = x - s.x;
+        const dy = y - s.y;
+        const d  = Math.sqrt(dx * dx + dy * dy);
+        v += Math.sin(d * s.f);
+      }
+      territory[y * W + x] = v / sources.length; // normalized ~[-1,1]
+    }
+  }
+}
+
+function init() {
+  buildTerritory();
+}
+
+// ── light particles ────────────────────────────────────────────────────────────
+// warm motes of attention drifting down, landing, illuminating
+const particles = [];
+
+class Mote {
+  constructor(x, y, fast) {
+    this.x  = x  ?? (Math.random() * W);
+    this.y  = y  ?? -4;
+    this.vx = (Math.random() - 0.5) * 0.4;
+    this.vy = fast ? 1.5 + Math.random() * 2 : 0.3 + Math.random() * 0.5;
+    this.r  = 0.8 + Math.random() * 1.2;
+    this.life = 1.0;
+    this.alive = true;
+    this.landed = false;
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // gentle drift
+    this.vx += (Math.random() - 0.5) * 0.04;
+    this.vx *= 0.98;
+
+    if (this.y >= H || this.x < 0 || this.x > W) {
+      this.alive = false;
+      return;
+    }
+
+    // when near ground, begin fading and illuminating
+    if (this.y > H * 0.15 && !this.landed) {
+      this.land();
+    }
+  }
+
+  land() {
+    this.landed = true;
+    const ix = Math.round(this.x);
+    const iy = Math.round(this.y);
+    const radius = Math.floor(10 + Math.random() * 14);
+
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius) continue;
+        const px = ix + dx;
+        const py = iy + dy;
+        if (px < 0 || px >= W || py < 0 || py >= H) continue;
+        const falloff = (1 - dist / radius);
+        const boost   = falloff * falloff * 0.018;
+        const idx = py * W + px;
+        illumination[idx] = Math.min(1, illumination[idx] + boost);
+      }
+    }
+    this.alive = false;
+  }
+
+  draw() {
+    if (this.landed) return;
+    const a = this.life * 0.55;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(220, 200, 140, ${a})`;
+    ctx.fill();
+  }
+}
+
+// ── render territory where illuminated ────────────────────────────────────────
+// use an offscreen ImageData for speed
+let imgData;
+let pixels;
+
+function renderTerritory() {
+  if (!imgData || imgData.width !== W || imgData.height !== H) {
+    imgData = ctx.createImageData(W, H);
+    pixels  = imgData.data;
+  }
+
+  for (let i = 0; i < W * H; i++) {
+    const illum = illumination[i];
+    if (illum < 0.005) {
+      pixels[i * 4]     = 4;
+      pixels[i * 4 + 1] = 4;
+      pixels[i * 4 + 2] = 10;
+      pixels[i * 4 + 3] = 255;
+      continue;
+    }
+
+    const t   = territory[i];       // -1 to 1
+    const norm = (t + 1) * 0.5;     // 0 to 1
+
+    // territory colours: dark blue-grey valleys, silver-white peaks
+    // cool, geometric, precise
+    const baseR = 20  + norm * 160;
+    const baseG = 25  + norm * 170;
+    const baseB = 45  + norm * 180;
+
+    // illumination fades in
+    const fade = Math.min(1, illum * 2.5);
+    const bg   = 4;
+
+    pixels[i * 4]     = Math.round(bg + (baseR - bg) * fade);
+    pixels[i * 4 + 1] = Math.round(bg + (baseG - bg) * fade);
+    pixels[i * 4 + 2] = Math.round(bg + (baseB - bg) * fade);
+    pixels[i * 4 + 3] = 255;
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// ── spawn ──────────────────────────────────────────────────────────────────────
+function autoSpawn() {
+  // slow, patient drift of light
+  if (Math.random() < 0.06) {
+    particles.push(new Mote());
+  }
+}
+
+// seed some initial motes
+for (let i = 0; i < 40; i++) {
+  particles.push(new Mote(
+    Math.random() * W,
+    Math.random() * H * 0.9
+  ));
+}
+
+// ── main loop ─────────────────────────────────────────────────────────────────
+function frame() {
+  autoSpawn();
+
+  // update particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update();
+    if (!particles[i].alive) particles.splice(i, 1);
+  }
+
+  // render territory (slow fade — no full clear, let territory accumulate)
+  renderTerritory();
+
+  // draw live particles on top
+  for (const p of particles) p.draw();
+
+  requestAnimationFrame(frame);
+}
+
+resize();
+frame();
+
+window.addEventListener('resize', resize);
+
+// click: pour attention onto a spot
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  for (let i = 0; i < 12; i++) {
+    particles.push(new Mote(
+      x + (Math.random() - 0.5) * 30,
+      y - Math.random() * 20,
+      true
+    ));
+  }
+});
+
+// drag: trail of light
+canvas.addEventListener('mousemove', e => {
+  if (e.buttons !== 1) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (Math.random() < 0.4) {
+    particles.push(new Mote(x, y, true));
+  }
+});
+</script>
+</body>
+</html>
