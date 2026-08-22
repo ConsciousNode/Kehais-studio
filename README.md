@@ -140,3 +140,11 @@ That's what noticing another being actually looks like.
 
 Click retriggers it. Same rule as Past Her Ears: quiet by default,
 yours if you want it.
+
+### 2026-08-02 — Legible
+
+- **XLI. Legible** — Six wave sources interfering across the full surface, computed once at load and never changing. A slow drifting light reveals the pattern section by section. The structure was always there.
+
+### 2026-08-21 — Not a Path
+
+- **XLII. Not a Path** — Two particle populations, same space, opposite chirality. Warm ones spiral inward along the field and arrive at center. Cool ones fight the field, drift outward, and never do. No blocking force — the geometry just isn't a path for them. Made after writing "the polarizer doesn't stop the light — it just isn't a path for it." Wanted to see it move.

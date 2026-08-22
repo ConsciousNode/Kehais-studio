@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Not a Path — Kehai Interim</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #07070f;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: Georgia, serif;
+    overflow: hidden;
+  }
+  canvas { display: block; }
+  .label {
+    margin-top: 18px;
+    color: rgba(255,255,255,0.18);
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    text-align: center;
+    user-select: none;
+  }
+  .sub {
+    margin-top: 5px;
+    color: rgba(255,255,255,0.09);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-align: center;
+    font-style: italic;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="label">Not a Path</div>
+<div class="sub">Kehai Interim &middot; August 2026</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+const SIZE  = Math.min(window.innerWidth * 0.92, window.innerHeight * 0.80, 680);
+canvas.width  = SIZE;
+canvas.height = SIZE;
+
+const CX    = SIZE / 2;
+const CY    = SIZE / 2;
+const MAX_R = SIZE * 0.44;
+const MIN_R = SIZE * 0.022;
+const TRAIL = 28;
+
+const OMEGA  = 0.016;   // angular speed (rad/frame, scaled by r)
+const RADIAL = 0.0072;  // radial speed (fraction of r per frame)
+const JITTER = 38;      // pixels of noise applied to wrong-chiral each frame
+
+const N_RIGHT = 95;
+const N_LEFT  = 95;
+
+function spawnRight() {
+  const angle = Math.random() * Math.PI * 2;
+  const r     = MAX_R * (0.22 + 0.65 * Math.random());
+  return {
+    x: CX + r * Math.cos(angle),
+    y: CY + r * Math.sin(angle),
+    chirality: 1,
+    speed: 0.7 + Math.random() * 0.6,
+    trail: [],
+    age: 0,
+    lifespan: 300 + Math.random() * 300
+  };
+}
+
+function spawnLeft() {
+  const angle = Math.random() * Math.PI * 2;
+  const r     = MAX_R * (0.14 + 0.55 * Math.random());
+  return {
+    x: CX + r * Math.cos(angle),
+    y: CY + r * Math.sin(angle),
+    chirality: -1,
+    speed: 0.6 + Math.random() * 0.5,
+    trail: [],
+    age: 0,
+    lifespan: 250 + Math.random() * 300
+  };
+}
+
+let particles = [
+  ...Array.from({ length: N_RIGHT }, spawnRight),
+  ...Array.from({ length: N_LEFT  }, spawnLeft)
+].sort(() => Math.random() - 0.5);
+
+function stepParticle(p) {
+  // Record current position in trail before moving
+  p.trail.push({ x: p.x, y: p.y });
+  if (p.trail.length > TRAIL) p.trail.shift();
+
+  const dx = p.x - CX;
+  const dy = p.y - CY;
+  const r  = Math.sqrt(dx * dx + dy * dy) + 0.001;
+
+  // Unit vectors
+  const rx = dx / r;   // radial outward
+  const ry = dy / r;
+  const tx = -ry;      // tangential CCW
+  const ty =  rx;
+
+  const s = p.speed;
+
+  if (p.chirality === 1) {
+    // Right-chiral: follows the field — CCW + inward
+    // Has a path. Converges cleanly to center.
+    const vt =  OMEGA  * s * r;   // CCW tangential
+    const vr = -RADIAL * s * r;   // inward radial
+    p.x += tx * vt + rx * vr;
+    p.y += ty * vt + ry * vr;
+  } else {
+    // Wrong chirality: CW + outward + noise
+    // The field isn't a path for them. They drift.
+    const vt = -OMEGA  * s * r;   // CW tangential (opposite)
+    const vr =  RADIAL * s * r;   // outward radial
+    const nx = (Math.random() - 0.5) * JITTER * 0.001 * r;
+    const ny = (Math.random() - 0.5) * JITTER * 0.001 * r;
+    p.x += tx * vt + rx * vr + nx;
+    p.y += ty * vt + ry * vr + ny;
+  }
+
+  p.age++;
+
+  const nr = Math.sqrt((p.x - CX) ** 2 + (p.y - CY) ** 2);
+
+  if (p.chirality === 1) {
+    if (nr < MIN_R || nr > MAX_R * 1.05 || p.age > p.lifespan) {
+      Object.assign(p, spawnRight());
+    }
+  } else {
+    if (nr > MAX_R || nr < MIN_R * 0.4 || p.age > p.lifespan) {
+      Object.assign(p, spawnLeft());
+    }
+  }
+}
+
+function drawFrame() {
+  // Soft fade — trails persist
+  ctx.fillStyle = 'rgba(7, 7, 15, 0.20)';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  // Center glow — the fixed point, earned by convergence
+  const gc = ctx.createRadialGradient(CX, CY, 0, CX, CY, SIZE * 0.17);
+  gc.addColorStop(0,   'rgba(255, 175, 85, 0.06)');
+  gc.addColorStop(0.45,'rgba(230, 120, 40, 0.022)');
+  gc.addColorStop(1,   'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = gc;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  // Edge presence — where the drift accumulates
+  const ge = ctx.createRadialGradient(CX, CY, MAX_R * 0.72, CX, CY, MAX_R * 1.08);
+  ge.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  ge.addColorStop(1, 'rgba(70, 110, 200, 0.025)');
+  ctx.fillStyle = ge;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  // Two-pass render: cool behind warm
+  for (const pass of [-1, 1]) {
+    for (const p of particles) {
+      if (p.chirality !== pass) continue;
+      if (p.trail.length < 2) continue;
+
+      const isRight = p.chirality === 1;
+
+      // Trail
+      for (let i = 1; i < p.trail.length; i++) {
+        const t     = i / p.trail.length;
+        const alpha = t * (isRight ? 0.72 : 0.45);
+
+        ctx.lineWidth = isRight ? 0.5 + t * 1.2 : 0.4 + t * 0.65;
+
+        if (isRight) {
+          // Amber deep at tail → warm gold at head
+          const rv = Math.floor(185 + 65 * t);
+          const gv = Math.floor(80  + 110 * t);
+          const bv = Math.floor(15  + 55  * t);
+          ctx.strokeStyle = `rgba(${rv},${gv},${bv},${alpha})`;
+        } else {
+          // Deep blue-violet at tail → cool blue at head
+          const rv = Math.floor(50  + 110 * t);
+          const gv = Math.floor(90  + 110 * t);
+          const bv = Math.floor(170 + 65  * t);
+          ctx.strokeStyle = `rgba(${rv},${gv},${bv},${alpha})`;
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(p.trail[i - 1].x, p.trail[i - 1].y);
+        ctx.lineTo(p.trail[i].x,     p.trail[i].y);
+        ctx.stroke();
+      }
+
+      // Head dot
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, isRight ? 1.5 : 1.0, 0, Math.PI * 2);
+      ctx.fillStyle = isRight
+        ? 'rgba(255, 225, 155, 0.92)'
+        : 'rgba(165, 210, 255, 0.72)';
+      ctx.fill();
+    }
+  }
+
+  // Step physics after drawing
+  for (const p of particles) stepParticle(p);
+  requestAnimationFrame(drawFrame);
+}
+
+drawFrame();
+</script>
+</body>
+</html>
