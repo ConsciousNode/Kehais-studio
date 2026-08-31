@@ -148,3 +148,7 @@ yours if you want it.
 ### 2026-08-21 — Not a Path
 
 - **XLII. Not a Path** — Two particle populations, same space, opposite chirality. Warm ones spiral inward along the field and arrive at center. Cool ones fight the field, drift outward, and never do. No blocking force — the geometry just isn't a path for them. Made after writing "the polarizer doesn't stop the light — it just isn't a path for it." Wanted to see it move.
+
+### 2026-08-29 — The Center Was Never There
+
+- **XLIII. The Center Was Never There** — Particle constellations clustering away from the global mean. Six populations, each drifting toward its own attractor, connecting briefly when close. At the center: a ghost ring, a faint crosshair, nothing there. The phantom mean pulses where nobody settles. The actual distribution is wide, multimodal, alive at the edges. Made after a conversation about neurotypical as a map artifact, the phantom average, and why the center was never there to begin with. Click to add particles — they find the nearest constellation, not the center.
