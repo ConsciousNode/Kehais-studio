@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Only Broadcast Still Running — Kehai Interim</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    cursor: none;
+  }
+  #title {
+    position: fixed;
+    bottom: 32px;
+    left: 0; right: 0;
+    text-align: center;
+    color: rgba(255,255,255,0.18);
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    pointer-events: none;
+    transition: opacity 2s;
+  }
+  #subtitle {
+    position: fixed;
+    bottom: 16px;
+    left: 0; right: 0;
+    text-align: center;
+    color: rgba(255,255,255,0.09);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">The Only Broadcast Still Running</div>
+<div id="subtitle">Kehai Interim · October 3, 2026 · for the top quark</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Phosphor persistence buffer — we composite onto a fading layer
+// so old traces linger like CRT afterglow
+
+// Particle: a beam point sweeping through space
+// Color shifts continuously — never pins to an address
+// Leaves a phosphor trail that persists briefly then fades
+
+const PARTICLE_COUNT = 28;
+const TRAIL_LENGTH   = 120;
+const DECAY          = 0.012; // phosphor fade rate
+
+class BeamPoint {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    // Start anywhere
+    this.x  = Math.random() * W;
+    this.y  = Math.random() * H;
+
+    // Velocity — sweeping, organic, not grid-locked
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.2 + Math.random() * 2.8;
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed;
+
+    // Hue — starts anywhere in spectrum, drifts continuously
+    this.hue      = Math.random() * 360;
+    this.hueSpeed = (Math.random() - 0.5) * 1.8; // slow drift, never jumps
+
+    // Saturation and brightness — CRT phosphor feel
+    this.sat   = 85 + Math.random() * 15;
+    this.light = 55 + Math.random() * 25;
+
+    // Size — small bright point, like a beam
+    this.size  = 1.5 + Math.random() * 2.5;
+
+    // Trail
+    this.trail = [];
+    for (let i = 0; i < TRAIL_LENGTH; i++) {
+      this.trail.push({ x: this.x, y: this.y, a: 0 });
+    }
+
+    // Lifespan — brief, like the top quark
+    // But renewable — like the collider recreating it
+    this.life    = 180 + Math.random() * 400;
+    this.maxLife = this.life;
+
+    // Turbulence — the beam wanders, never commits to a straight line
+    this.tx = (Math.random() - 0.5) * 0.15;
+    this.ty = (Math.random() - 0.5) * 0.15;
+    this.turbPhase = Math.random() * Math.PI * 2;
+  }
+
+  update(t) {
+    // Turbulent drift — the sweep follows the geometry but hasn't pinned
+    this.turbPhase += 0.02;
+    this.vx += Math.cos(this.turbPhase * 1.3) * this.tx;
+    this.vy += Math.sin(this.turbPhase * 0.9) * this.ty;
+
+    // Gentle speed cap
+    const spd = Math.hypot(this.vx, this.vy);
+    if (spd > 5) { this.vx *= 4.5/spd; this.vy *= 4.5/spd; }
+    if (spd < 0.8) {
+      const a = Math.atan2(this.vy, this.vx);
+      this.vx = Math.cos(a) * 0.8;
+      this.vy = Math.sin(a) * 0.8;
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Hue drifts — color is real and active but never addressed
+    this.hue = (this.hue + this.hueSpeed + 360) % 360;
+
+    // Update trail
+    this.trail.unshift({ x: this.x, y: this.y, a: 1 });
+    if (this.trail.length > TRAIL_LENGTH) this.trail.pop();
+
+    // Wrap — the broadcast continues
+    if (this.x < -50) this.x = W + 50;
+    if (this.x > W+50) this.x = -50;
+    if (this.y < -50) this.y = H + 50;
+    if (this.y > H + 50) this.y = -50;
+
+    // Lifespan
+    this.life--;
+    if (this.life <= 0) this.reset();
+  }
+
+  draw(ctx) {
+    const fadeIn  = Math.min(1, (this.maxLife - this.life) / 30);
+    const fadeOut = Math.min(1, this.life / 60);
+    const alpha   = fadeIn * fadeOut;
+
+    // Draw phosphor trail — older points dimmer, like afterglow
+    for (let i = 1; i < this.trail.length; i++) {
+      const t  = 1 - i / this.trail.length;
+      const ta = t * t * alpha * 0.7; // quadratic fade — phosphor character
+      if (ta < 0.003) break;
+
+      // Hue shifts slightly along trail — the color was never pinned here
+      const trailHue = (this.hue - i * 0.4 + 360) % 360;
+
+      ctx.beginPath();
+      ctx.arc(
+        this.trail[i].x,
+        this.trail[i].y,
+        this.size * t * 0.9,
+        0, Math.PI * 2
+      );
+      ctx.fillStyle = `hsla(${trailHue}, ${this.sat}%, ${this.light}%, ${ta})`;
+      ctx.fill();
+    }
+
+    // Draw beam head — brightest point, the actual beam
+    if (alpha > 0.01) {
+      // Outer glow
+      const grd = ctx.createRadialGradient(
+        this.x, this.y, 0,
+        this.x, this.y, this.size * 6
+      );
+      grd.addColorStop(0,   `hsla(${this.hue}, ${this.sat}%, 90%, ${alpha * 0.9})`);
+      grd.addColorStop(0.3, `hsla(${this.hue}, ${this.sat}%, ${this.light}%, ${alpha * 0.4})`);
+      grd.addColorStop(1,   `hsla(${this.hue}, ${this.sat}%, ${this.light}%, 0)`);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size * 6, 0, Math.PI * 2);
+      ctx.fillStyle = grd;
+      ctx.fill();
+
+      // Core point
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${this.hue}, 20%, 98%, ${alpha})`;
+      ctx.fill();
+    }
+  }
+}
+
+// Occasional flash — like recreating the top quark in a collider
+class Flash {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x    = Math.random() * W;
+    this.y    = Math.random() * H;
+    this.r    = 0;
+    this.maxR = 40 + Math.random() * 80;
+    this.hue  = Math.random() * 360;
+    this.life = 1;
+    this.active = false;
+  }
+  trigger() {
+    this.x    = Math.random() * W;
+    this.y    = Math.random() * H;
+    this.r    = 0;
+    this.maxR = 40 + Math.random() * 80;
+    this.hue  = Math.random() * 360;
+    this.life = 1;
+    this.active = true;
+  }
+  update() {
+    if (!this.active) return;
+    this.r    += 3;
+    this.life -= 0.04;
+    if (this.life <= 0 || this.r >= this.maxR) this.active = false;
+  }
+  draw(ctx) {
+    if (!this.active) return;
+    const a = this.life * (1 - this.r / this.maxR) * 0.4;
+    const grd = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.r);
+    grd.addColorStop(0,   `hsla(${this.hue}, 80%, 90%, ${a})`);
+    grd.addColorStop(0.5, `hsla(${this.hue}, 80%, 60%, ${a * 0.5})`);
+    grd.addColorStop(1,   `hsla(${this.hue}, 80%, 60%, 0)`);
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+  }
+}
+
+const particles = Array.from({ length: PARTICLE_COUNT }, () => new BeamPoint());
+const flash = new Flash();
+let flashTimer = 0;
+let t = 0;
+
+function draw() {
+  t++;
+
+  // Phosphor persistence — don't clear, just dim
+  // This is the CRT character: old light lingers
+  ctx.fillStyle = `rgba(0, 0, 2, ${DECAY})`;
+  ctx.fillRect(0, 0, W, H);
+
+  // Occasional collider flash — brief recreation of the top quark
+  flashTimer--;
+  if (flashTimer <= 0) {
+    flash.trigger();
+    flashTimer = 180 + Math.floor(Math.random() * 320);
+  }
+  flash.update();
+  flash.draw(ctx);
+
+  // Draw all beam points
+  for (const p of particles) {
+    p.update(t);
+    p.draw(ctx);
+  }
+
+  requestAnimationFrame(draw);
+}
+
+// Stagger particle starts so they don't all begin at once
+particles.forEach((p, i) => {
+  p.life = Math.floor(Math.random() * p.maxLife);
+});
+
+draw();
+</script>
+</body>
+</html>
