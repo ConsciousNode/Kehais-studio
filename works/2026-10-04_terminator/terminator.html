@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Terminator — Kehai Interim</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000;
+  width: 100vw; height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+canvas { display: block; }
+#meta {
+  position: fixed;
+  bottom: 18px; right: 22px;
+  color: rgba(165,120,48,0.38);
+  font-family: Georgia, serif;
+  font-size: 10px;
+  letter-spacing: 0.17em;
+  text-align: right;
+  pointer-events: none;
+  line-height: 1.65;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="meta">
+  TERMINATOR · XLV<br>
+  Kehai Interim · 2026-10-04<br>
+  <span style="font-size:8px;opacity:0.7">the threshold is where information is richest</span>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const SIZE   = Math.min(window.innerWidth*0.94, window.innerHeight*0.90, 700) | 0;
+canvas.width = canvas.height = SIZE;
+const cx = SIZE/2, cy = SIZE/2, R = SIZE*0.41;
+
+// ── TEXTURE ──────────────────────────────────────────────────────
+const TEX = 256;
+const texBuf = new Float32Array(TEX * TEX);
+
+for (let ty = 0; ty < TEX; ty++) {
+  for (let tx = 0; tx < TEX; tx++) {
+    const u = tx/TEX * 6.2832, v = ty/TEX * 6.2832;
+    let n = 0, a = 0.44, f = 1;
+    const phi = [0, 1.618, 2.718, 4.236, 0.577, 1.414];
+    for (let o = 0; o < 6; o++) {
+      n += Math.sin(u*f*3.1 + v*f*1.9 + phi[o]) * a;
+      n += Math.cos(u*f*2.3 - v*f*4.1 + phi[o]*1.7) * a * 0.6;
+      a *= 0.5; f *= 2.07;
+    }
+    texBuf[ty*TEX + tx] = Math.max(0, Math.min(1, n*0.55 + 0.53));
+  }
+}
+
+// Caldera depressions
+const calderas = [
+  {u:0.22,v:0.38,r:0.045,d:0.40},
+  {u:0.67,v:0.51,r:0.055,d:0.43},
+  {u:0.11,v:0.71,r:0.032,d:0.28},
+  {u:0.54,v:0.19,r:0.038,d:0.33},
+  {u:0.81,v:0.77,r:0.048,d:0.36},
+  {u:0.38,v:0.85,r:0.028,d:0.23},
+  {u:0.93,v:0.33,r:0.041,d:0.30},
+  {u:0.48,v:0.60,r:0.036,d:0.26},
+];
+for (const c of calderas) {
+  for (let ty = 0; ty < TEX; ty++) {
+    for (let tx = 0; tx < TEX; tx++) {
+      const du = tx/TEX - c.u, dv = ty/TEX - c.v;
+      texBuf[ty*TEX+tx] = Math.max(0,
+        texBuf[ty*TEX+tx] - c.d * Math.exp(-(du*du+dv*dv)/(c.r*c.r*2)));
+    }
+  }
+}
+
+// ── COLOR MAP ────────────────────────────────────────────────────
+function lp(a,b,t){ return a+(b-a)*Math.max(0,Math.min(1,t)); }
+
+function ioColor(t, diff) {
+  let r, g, b;
+  if      (t < 0.12) { const f=t/0.12;       r=lp(5,24,f);   g=lp(3,13,f);   b=lp(2,6,f);   }
+  else if (t < 0.30) { const f=(t-0.12)/0.18; r=lp(24,70,f);  g=lp(13,38,f);  b=lp(6,10,f);  }
+  else if (t < 0.48) { const f=(t-0.30)/0.18; r=lp(70,92,f);  g=lp(38,85,f);  b=lp(10,27,f); }
+  else if (t < 0.65) { const f=(t-0.48)/0.17; r=lp(92,192,f); g=lp(85,152,f); b=lp(27,18,f); }
+  else if (t < 0.82) { const f=(t-0.65)/0.17; r=lp(192,215,f);g=lp(152,105,f);b=lp(18,13,f); }
+  else               { const f=(t-0.82)/0.18; r=lp(215,235,f);g=lp(105,208,f);b=lp(13,152,f);}
+  const lit = 0.055 + 0.945*diff;
+  return [r*lit|0, g*lit|0, b*lit|0];
+}
+
+// ── BLOOMS ───────────────────────────────────────────────────────
+const blooms = [];
+function spawnBloom(px, py) {
+  blooms.push({
+    x:px, y:py,
+    size: 3.5 + Math.random()*13,
+    age: 0,
+    maxAge: 88 + (Math.random()*105|0),
+    r: 222+(Math.random()*33|0),
+    g: 128+(Math.random()*82|0),
+    b:  16+(Math.random()*38|0),
+  });
+}
+
+// ── TERMINATOR SAMPLER ───────────────────────────────────────────
+function sampleTerminator(t, la) {
+  const lx0=Math.sin(la), ly0=-0.18, lz0=Math.cos(la);
+  const lLen=Math.sqrt(lx0*lx0+ly0*ly0+lz0*lz0);
+  const Lx=lx0/lLen, Ly=ly0/lLen, Lz=lz0/lLen;
+  // e1 perp to L in xz-plane
+  const er=Math.sqrt(Lz*Lz+Lx*Lx);
+  const e1x=-Lz/er, e1y=0, e1z=Lx/er;
+  // e2 = L × e1
+  const e2x=Ly*e1z-Lz*e1y, e2y=Lz*e1x-Lx*e1z, e2z=Lx*e1y-Ly*e1x;
+  const ct=Math.cos(t), st=Math.sin(t);
+  const vx=ct*e1x+st*e2x, vy=ct*e1y+st*e2y, vz=ct*e1z+st*e2z;
+  if (vz < 0.04) return null;
+  return { px: cx+R*vx, py: cy-R*vy };
+}
+
+// ── RENDER ───────────────────────────────────────────────────────
+const imgData = ctx.createImageData(SIZE, SIZE);
+const pix     = imgData.data;
+let lightAngle = 0.82;
+let fadeStart  = null;
+const FADE_DUR = 2800;
+
+function render(now) {
+  lightAngle += 0.00022;
+
+  const lx0=Math.sin(lightAngle), ly0=-0.18, lz0=Math.cos(lightAngle);
+  const lLen=Math.sqrt(lx0*lx0+ly0*ly0+lz0*lz0);
+  const Lx=lx0/lLen, Ly=ly0/lLen, Lz=lz0/lLen;
+
+  // Sphere via ImageData
+  for (let py = 0; py < SIZE; py++) {
+    const dy = (py-cy)/R, dy2 = dy*dy;
+    for (let px = 0; px < SIZE; px++) {
+      const pi = (py*SIZE+px)*4;
+      const dx = (px-cx)/R;
+      const d2 = dx*dx+dy2;
+      if (d2 > 1.0) {
+        pix[pi]=pix[pi+1]=pix[pi+2]=0; pix[pi+3]=255; continue;
+      }
+      const dz = Math.sqrt(1.0-d2);
+      const rawD = dx*Lx + dy*Ly + dz*Lz;
+      // Penumbra softening
+      const diff = rawD < 0 ? 0 : rawD < 0.06 ? (rawD/0.06)*(rawD/0.06) : rawD;
+      // Spherical UV
+      const theta = Math.atan2(dx, dz);
+      const phi_  = Math.asin(Math.max(-1,Math.min(1,dy)));
+      const tu = ((theta/6.2832+0.5)*(TEX-1))|0;
+      const tv = ((phi_/3.14159+0.5)*(TEX-1))|0;
+      const tv_ = Math.max(0,Math.min(TEX-1,tv));
+      const tu_ = Math.max(0,Math.min(TEX-1,tu));
+      const texV = texBuf[tv_*TEX+tu_];
+      const [r,g,b] = ioColor(texV, diff);
+      // Limb atmosphere
+      const limb = 1-dz;
+      const atm  = limb*limb*limb*diff*0.32;
+      pix[pi]  = Math.min(255, r + (atm*52)|0);
+      pix[pi+1]= Math.min(255, g + (atm*78)|0);
+      pix[pi+2]= Math.min(255, b + (atm*33)|0);
+      pix[pi+3]= 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  // Atmosphere limb halo
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const ag = ctx.createRadialGradient(cx,cy,R*0.95, cx,cy,R*1.09);
+  ag.addColorStop(0,'rgba(75,105,45,0.08)');
+  ag.addColorStop(0.55,'rgba(55,85,35,0.03)');
+  ag.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = ag;
+  ctx.beginPath(); ctx.arc(cx,cy,R*1.12,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Spawn bloom
+  if (Math.random() < 0.034) {
+    for (let a=0; a<30; a++) {
+      const pt = sampleTerminator(Math.random()*6.2832, lightAngle);
+      if (pt) { spawnBloom(pt.px, pt.py); break; }
+    }
+  }
+
+  // Draw blooms
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (let i = blooms.length-1; i >= 0; i--) {
+    const bl = blooms[i];
+    bl.age++;
+    if (bl.age >= bl.maxAge) { blooms.splice(i,1); continue; }
+    const p = bl.age/bl.maxAge;
+    const sz = bl.size * (p < 0.22 ? p/0.22 : p < 0.68 ? 1 : 1-(p-0.68)/0.32);
+    const al = p < 0.12 ? p/0.12 : p > 0.66 ? 1-(p-0.66)/0.34 : 1;
+    const bg = ctx.createRadialGradient(bl.x,bl.y,0,bl.x,bl.y,Math.max(0.5,sz));
+    bg.addColorStop(0,`rgba(${bl.r},${bl.g},${bl.b},${(al*0.9).toFixed(3)})`);
+    bg.addColorStop(0.42,`rgba(${bl.r},${bl.g>>1},${bl.b},${(al*0.38).toFixed(3)})`);
+    bg.addColorStop(1,'rgba(200,0,0,0)');
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.arc(bl.x,bl.y,Math.max(0.5,sz),0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+
+  // Fade in from black
+  if (!fadeStart) fadeStart = now;
+  const ft = Math.min(1,(now-fadeStart)/FADE_DUR);
+  if (ft < 1) {
+    ctx.fillStyle = `rgba(0,0,0,${(1-ft).toFixed(4)})`;
+    ctx.fillRect(0,0,SIZE,SIZE);
+  }
+
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
