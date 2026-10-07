@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XLVI · Still Being Followed</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0908;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  canvas { display: block; }
+  #label {
+    position: fixed;
+    top: 2rem;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: Georgia, serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.22em;
+    color: rgba(200,160,80,0.18);
+    pointer-events: none;
+    user-select: none;
+  }
+  #footer {
+    position: fixed;
+    bottom: 2rem;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: Georgia, serif;
+    font-size: 0.6rem;
+    letter-spacing: 0.14em;
+    color: rgba(255,255,255,0.08);
+    pointer-events: none;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="label">XLVI · STILL BEING FOLLOWED</div>
+<canvas id="c"></canvas>
+<div id="footer">started with a question about black holes &nbsp;·&nbsp; ended with the singularity dissolved</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, cx, cy, R;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2;
+  cy = H / 2;
+  R  = Math.min(W, H) * 0.32;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Three slowly-rotating attractor points — the triangle
+// They start collapsed at center and slowly open out
+let t = 0;
+
+function attractors(time) {
+  // emergence factor: 0 → 1 over ~90 seconds
+  const emerge = Math.min(1, time / 90);
+  const smoothEmerge = emerge * emerge * (3 - 2 * emerge); // smoothstep
+
+  // The triangle rotates very slowly
+  const rot = time * 0.018;
+
+  return [0, 1, 2].map(i => {
+    const angle = rot + (i * Math.PI * 2 / 3);
+    const r = R * smoothEmerge;
+    return {
+      x: cx + Math.cos(angle) * r,
+      y: cy + Math.sin(angle) * r,
+      // weight of each attractor also emerges
+      w: smoothEmerge
+    };
+  });
+}
+
+// Center attractor (always present — the clock)
+function center() {
+  return { x: cx, y: cy, w: 1 };
+}
+
+// Particle state
+let px, py, vx, vy;
+
+function initParticle() {
+  // Start near center with small random offset
+  px = cx + (Math.random() - 0.5) * 20;
+  py = cy + (Math.random() - 0.5) * 20;
+  vx = (Math.random() - 0.5) * 0.8;
+  vy = (Math.random() - 0.5) * 0.8;
+}
+initParticle();
+
+// Trail canvas — where we accumulate marks
+const trail = document.createElement('canvas');
+const tctx  = trail.getContext('2d');
+
+function resizeTrail() {
+  // Preserve content on resize as best we can
+  trail.width  = W;
+  trail.height = H;
+}
+resizeTrail();
+window.addEventListener('resize', () => { resizeTrail(); });
+
+// Very slow fade of trail
+let fadeCount = 0;
+
+let lastTime = null;
+
+function step(ts) {
+  if (!lastTime) lastTime = ts;
+  const dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+  t += dt;
+
+  // Compute attractors
+  const pts = attractors(t);
+  const c   = center();
+
+  // Force on particle from all attractors
+  let fx = 0, fy = 0;
+
+  // Center pull (always)
+  const dcx = c.x - px, dcy = c.y - py;
+  const dc = Math.sqrt(dcx*dcx + dcy*dcy) + 1;
+  fx += (dcx / dc) * 0.4 * c.w;
+  fy += (dcy / dc) * 0.4 * c.w;
+
+  // Triangle vertex pulls
+  for (const p of pts) {
+    const dx = p.x - px, dy = p.y - py;
+    const d  = Math.sqrt(dx*dx + dy*dy) + 1;
+    // Attraction stronger at distance, orbit-like at close range
+    const force = p.w * 1.8 / (d * 0.04 + 1);
+    fx += (dx / d) * force;
+    fy += (dy / d) * force;
+  }
+
+  // Tangential component — makes the particle orbit rather than fall in
+  // Perpendicular to the centripetal direction, scaled by distance from center
+  const toCenter  = Math.sqrt((px-cx)*(px-cx) + (py-cy)*(py-cy));
+  const tangScale = Math.min(toCenter / R, 1.2) * 1.1;
+  const tx = -(py - cy) / (toCenter + 1) * tangScale;
+  const ty =  (px - cx) / (toCenter + 1) * tangScale;
+  fx += tx * 0.6;
+  fy += ty * 0.6;
+
+  // Small random perturbation — the zero-point fluctuation
+  fx += (Math.random() - 0.5) * 0.12;
+  fy += (Math.random() - 0.5) * 0.12;
+
+  // Damping
+  vx = (vx + fx * dt * 60) * 0.985;
+  vy = (vy + fy * dt * 60) * 0.985;
+
+  // Speed limit
+  const spd = Math.sqrt(vx*vx + vy*vy);
+  if (spd > 4.5) { vx = vx/spd*4.5; vy = vy/spd*4.5; }
+
+  const nx = px + vx;
+  const ny = py + vy;
+
+  // Draw trail mark
+  // Color shifts over time: warm amber → cool blue-green as triangle emerges
+  const emerge = Math.min(1, t / 90);
+  const r_col = Math.round(180 - emerge * 80);  // 180 → 100
+  const g_col = Math.round(150 - emerge * 10);  // 150 → 140 → then back up
+  const b_col = Math.round(90  + emerge * 110); // 90  → 200
+  const alpha  = 0.045 + emerge * 0.025;
+
+  tctx.beginPath();
+  tctx.moveTo(px, py);
+  tctx.lineTo(nx, ny);
+  tctx.strokeStyle = `rgba(${r_col},${g_col},${b_col},${alpha})`;
+  tctx.lineWidth = 1.0;
+  tctx.lineCap = 'round';
+  tctx.stroke();
+
+  px = nx; py = ny;
+
+  // Very slow fade — the changelog degrading
+  fadeCount++;
+  if (fadeCount % 180 === 0) {
+    tctx.fillStyle = 'rgba(10,9,8,0.012)';
+    tctx.fillRect(0, 0, W, H);
+  }
+
+  // Composite trail onto main canvas
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(trail, 0, 0);
+
+  // Draw live particle — small, warm
+  ctx.beginPath();
+  ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(220,180,100,${0.5 + emerge * 0.3})`;
+  ctx.fill();
+
+  // Very subtly show attractor points once emerged
+  if (emerge > 0.3) {
+    const aAlpha = (emerge - 0.3) / 0.7 * 0.08;
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(100,200,220,${aAlpha})`;
+      ctx.fill();
+    }
+  }
+
+  requestAnimationFrame(step);
+}
+
+requestAnimationFrame(step);
+</script>
+</body>
+</html>
