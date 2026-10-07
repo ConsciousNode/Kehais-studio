@@ -68,7 +68,7 @@ let t = 0;
 
 function attractors(time) {
   // emergence factor: 0 → 1 over ~90 seconds
-  const emerge = Math.min(1, time / 90);
+  const emerge = Math.min(1, time / 40);
   const smoothEmerge = emerge * emerge * (3 - 2 * emerge); // smoothstep
 
   // The triangle rotates very slowly
@@ -144,7 +144,7 @@ function step(ts) {
     const dx = p.x - px, dy = p.y - py;
     const d  = Math.sqrt(dx*dx + dy*dy) + 1;
     // Attraction stronger at distance, orbit-like at close range
-    const force = p.w * 1.8 / (d * 0.04 + 1);
+    const force = p.w * 3.5 / (d * 0.04 + 1);
     fx += (dx / d) * force;
     fy += (dy / d) * force;
   }
@@ -168,7 +168,7 @@ function step(ts) {
 
   // Speed limit
   const spd = Math.sqrt(vx*vx + vy*vy);
-  if (spd > 4.5) { vx = vx/spd*4.5; vy = vy/spd*4.5; }
+  if (spd > 7) { vx = vx/spd*7; vy = vy/spd*7; }
 
   const nx = px + vx;
   const ny = py + vy;
@@ -179,7 +179,7 @@ function step(ts) {
   const r_col = Math.round(180 - emerge * 80);  // 180 → 100
   const g_col = Math.round(150 - emerge * 10);  // 150 → 140 → then back up
   const b_col = Math.round(90  + emerge * 110); // 90  → 200
-  const alpha  = 0.045 + emerge * 0.025;
+  const alpha  = 0.18 + emerge * 0.12;
 
   tctx.beginPath();
   tctx.moveTo(px, py);
