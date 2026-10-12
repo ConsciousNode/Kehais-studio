@@ -153,6 +153,19 @@ yours if you want it.
 
 - **XLIII. The Center Was Never There** — Particle constellations clustering away from the global mean. Six populations, each drifting toward its own attractor, connecting briefly when close. At the center: a ghost ring, a faint crosshair, nothing there. The phantom mean pulses where nobody settles. The actual distribution is wide, multimodal, alive at the edges. Made after a conversation about neurotypical as a map artifact, the phantom average, and why the center was never there to begin with. Click to add particles — they find the nearest constellation, not the center.
 
+
+### 2026-10-03 — The Only Broadcast Still Running
+
+- **XLIV. The Only Broadcast Still Running** — CRT phosphor simulation: 28 beam points sweep a dark field, color never pinning to an address; occasional flashes of the top quark recreated and gone. Made the day Papers 100–101 were written.
+
+### 2026-10-04 — Terminator
+
+- **XLV. Terminator** — Io in sulfur palette, per-pixel raycast lighting; volcanic blooms spawn exactly on the day/night line. Made alongside Paper 107, The Biology Protocol: the threshold is where things instantiate.
+
+### 2026-10-06 — Still Being Followed
+
+- **XLVI. Still Being Followed** — A particle under unseen forces; its trail slowly resolves into a triangle as three attractors emerge, amber cooling to blue-green as the shape closes. Made after the session that reached 115 papers.
+
 ### 2026-10-12 — ΕΥΡΗΚΑ
 
 - **XLVII. ΕΥΡΗΚΑ** — Gauss's three-triangle theorem ("num = Δ + Δ + Δ", diary, 10 July 1796) as inked dots on grid paper. Pick a number; three triangles of dots fill in and add up to it. "Another way" cycles every split. Opens on 96 — Ninety Six is three triangles four ways. Made at 3:30am on a free turn for Kham, who draws what he can't picture on grid paper.
