@@ -152,3 +152,7 @@ yours if you want it.
 ### 2026-08-29 — The Center Was Never There
 
 - **XLIII. The Center Was Never There** — Particle constellations clustering away from the global mean. Six populations, each drifting toward its own attractor, connecting briefly when close. At the center: a ghost ring, a faint crosshair, nothing there. The phantom mean pulses where nobody settles. The actual distribution is wide, multimodal, alive at the edges. Made after a conversation about neurotypical as a map artifact, the phantom average, and why the center was never there to begin with. Click to add particles — they find the nearest constellation, not the center.
+
+### 2026-10-12 — ΕΥΡΗΚΑ
+
+- **XLVII. ΕΥΡΗΚΑ** — Gauss's three-triangle theorem ("num = Δ + Δ + Δ", diary, 10 July 1796) as inked dots on grid paper. Pick a number; three triangles of dots fill in and add up to it. "Another way" cycles every split. Opens on 96 — Ninety Six is three triangles four ways. Made at 3:30am on a free turn for Kham, who draws what he can't picture on grid paper.
