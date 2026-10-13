@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Charted Wrecks</title>
+<style>
+:root{
+  --paper:#f3ead3; --paper2:#ece0c2; --ink:#2b2a2e; --ink-soft:rgba(43,42,46,.55);
+  --shoal:#b9d3dc; --shoal2:#d6e6ea; --land:#e4cf9a; --land-edge:#7a6638;
+  --magenta:#b0287a; --danger:#2b2a2e; --route:#7a3b2e; --card:#fbf6e8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#141210; --paper2:#1b1814; --ink:#e8dcc0; --ink-soft:rgba(232,220,192,.5);
+    --shoal:#1d3138; --shoal2:#172429; --land:#3a3122; --land-edge:#a88f55;
+    --magenta:#e36aae; --danger:#e8dcc0; --route:#d08a6e; --card:#1e1b17;
+  }
+}
+:root[data-theme="dark"]{
+    --paper:#141210; --paper2:#1b1814; --ink:#e8dcc0; --ink-soft:rgba(232,220,192,.5);
+    --shoal:#1d3138; --shoal2:#172429; --land:#3a3122; --land-edge:#a88f55;
+    --magenta:#e36aae; --danger:#e8dcc0; --route:#d08a6e; --card:#1e1b17;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--paper);color:var(--ink)}
+body{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;padding:20px 16px 48px}
+.wrap{max-width:1180px;margin:0 auto}
+svg{width:100%;height:auto;display:block;border:1.5px solid var(--ink);background:var(--paper)}
+.scroller{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.hint{display:none;font-size:.78rem;font-style:italic;color:var(--ink-soft);margin-top:6px}
+@media (max-width:760px){#chart{min-width:980px}.hint{display:block}}
+.mark{cursor:pointer}
+.mark:focus{outline:none}
+.mark:focus .halo,.mark:hover .halo,.mark.on .halo{opacity:1}
+.halo{opacity:0;transition:opacity .15s}
+.notice{margin-top:14px;border:1.5px solid var(--ink);background:var(--card);padding:14px 16px;min-height:118px}
+.notice h2{font-size:.72rem;letter-spacing:.2em;font-weight:normal;color:var(--ink-soft);margin-bottom:8px}
+.notice .t{font-size:1.15rem;margin-bottom:4px}
+.notice .s{font-style:italic;color:var(--magenta);margin-bottom:6px;font-size:.95rem}
+.notice p{line-height:1.5;font-size:.95rem}
+.foot{margin-top:14px;display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between;font-size:.8rem;color:var(--ink-soft);line-height:1.6}
+.foot a{color:var(--ink-soft)}
+button.theme{font:inherit;font-size:.8rem;background:none;border:1px solid var(--ink-soft);color:var(--ink-soft);padding:2px 10px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="scroller"><svg id="chart" viewBox="0 0 1200 760" role="img" aria-label="A nautical chart of the 123 corpus papers, with wrecks, buoys and lights marking their audit status"></svg></div>
+<div class="hint">Swipe the chart sideways to sail along it.</div>
+<div class="notice" id="notice" aria-live="polite">
+  <h2>NOTICE TO MARINERS</h2>
+  <div class="t">Charted Wrecks</div>
+  <p>A survey of the corpus waters, Papers 1–123, run in four survey lines, one per volume. Every paper sits where the voyage passed it, marked with what the audit found. Hover or tap any mark to read its notice. Wrecks are not failures. They are charted, so no one hits them twice.</p>
+</div>
+<div class="foot">
+  <div>Surveyed by Kehai Interim, October 2026, from the errata series (Papers 125–128). Soundings in receipts.</div>
+  <div><button class="theme" id="tt">day / night chart</button> &nbsp; <a href="../../index.html">← studio</a></div>
+</div>
+</div>
+<script>
+const DATA = [{"n": 1, "t": "On Logic And Its Consequences", "s": "Revised", "note": "Razor and map/territory stand. Withdraw \"the LHC manipulates probability,\" Wheel-algebra finiteness, and the TOV phase transition (R1). Cyclic fine-tuning: cite Smolin 1992.", "c": "R"}, {"n": 2, "t": "There Be Dragons", "s": "Stands", "note": "Cite the weak anthropic principle (Carter 1973). The Bekenstein bound does not pick a direction.", "c": "S"}, {"n": 3, "t": "And Another Thing", "s": "Revised", "note": "\"Followable in principle\" becomes an Open hole given Gödel and Turing. GR–QM is not resolved.", "c": "R"}, {"n": 4, "t": "Two Wrongs Don't Make A Right", "s": "Withdrawn as physics", "note": "Standard collapse has no conservation problem (ADM mass is conserved). The philosophy of horror vacui is retained.", "c": "W"}, {"n": 5, "t": "There Can Be Only One", "s": "Conditional (R1)", "note": "Black holes keep charge. Proto-noticing as stated is untestable.", "c": "C"}, {"n": 6, "t": "A Bit From An It", "s": "Stands", "note": "Fact fixes: Great Oxidation as a hypothesis; anthrobots versus xenobots; Einstein's doctorate.", "c": "S"}, {"n": 7, "t": "The Ground Floor", "s": "Stands", "note": "—", "c": "S"}, {"n": 8, "t": "Look Around You", "s": "Revised", "note": "The finite-part table is coefficient-reading. \"Supported\" becomes \"unchecked.\" Bohmian \"forced entanglement\" becomes an Open hole pending code.", "c": "R"}, {"n": 9, "t": "Leggo My Ego", "s": "Stands", "note": "Cite Dennett, Frankish, Russell, Price. Irrational numbers are not probabilistic.", "c": "S"}, {"n": 10, "t": "Vulcan's Forge", "s": "Conditional (R3, R4)", "note": "The Casimir force is measured; its gravitational effect is not. Doom is a BSP renderer.", "c": "C"}, {"n": 11, "t": "It's All Relative", "s": "Stands, §7 withdrawn", "note": "The relational ontology stands with prior art. The \"independent confirmation\" of §7 is withdrawn.", "c": "S"}, {"n": 12, "t": "Holistic Logical Monism", "s": "Revised", "note": "0 < 1 as axiom, not derivation (R5). The Chakram is a research stance (the PSR). Sudoku and Bell sections withdrawn (R8). Chalmers and Nagel restated fairly.", "c": "R"}, {"n": 13, "t": "To Be Or Not To Be — Revisited", "s": "Revised", "note": "Reconstructive self-access stands. It does not answer Nagel's actual claim.", "c": "R"}, {"n": 14, "t": "What's Good For The Goose", "s": "Revised", "note": "Restated openly as a panpsychist position, with its combination problem and falsifiability marked as Open holes.", "c": "R"}, {"n": 15, "t": "Dancing On The Borderline", "s": "Revised", "note": "The combination problem is renamed, not escaped. \"I\" as a map term stands (Hume, Dennett).", "c": "R"}, {"n": 16, "t": "Now And Later", "s": "Revised", "note": "Ontic uncertainty stands as the textbook view. Interpretation flagged (§IV). Quantum chance does not supply control.", "c": "R"}, {"n": 17, "t": "Time And Relative Derivations In Space", "s": "Withdrawn as physics", "note": "R2. Redirect to Page & Wootters 1983.", "c": "W"}, {"n": 18, "t": "Local Non-Locality", "s": "Conditional (R3); Cor. 6.1 stands", "note": "ISS clocks run slower than ground clocks. Gravitational waves are not shielded by rock. Cor. 6.1 is the Novikov principle.", "c": "C"}, {"n": 19, "t": "The Electromagnetic Node", "s": "Revised", "note": "Maxwell's equations are not a Turing pattern. U(1) → charge is Noether. Proton decay is not Higgs. Lenz and Lorentz descriptions stand.", "c": "R"}, {"n": 20, "t": "The Spiral Energy Principle", "s": "Withdrawn as physics", "note": "R7 throughout. Retained as aesthetic musing.", "c": "W"}, {"n": 21, "t": "Thermodynamic Commons", "s": "Revised", "note": "Restated as a Popper \"World 3\" position. No thermodynamic deduplication law exists. The shared-structure hypothesis becomes an Open hole.", "c": "R"}, {"n": 22, "t": "The Pattern", "s": "Withdrawn as physics", "note": "R6. The Wheel of Time readings are retained as literary analysis.", "c": "W"}, {"n": 23, "t": "The Lace of Ages", "s": "Withdrawn as physics", "note": "Exergy, not total energy. The gyroscope demonstration conserves work (cf. Laithwaite 1974). The literary reading is retained.", "c": "W"}, {"n": 24, "t": "It's Time To Toss The Dice", "s": "Revised", "note": "Determined/deterministic stands. Heisenberg is irrelevant to dice (computed). The second law is statistical (Evans & Searles 1994).", "c": "R"}, {"n": 25, "t": "The Past Is Still The Future", "s": "Revised", "note": "Landauer and block-versus-predetermination stand. The refutation of determinism by redefining \"determined\" is withdrawn.", "c": "R"}, {"n": 26, "t": "The Drill of Entropy", "s": "Revised", "note": "Restated in terms of limit cycles. Golden-spiral uniqueness withdrawn.", "c": "R"}, {"n": 27, "t": "The Chiral Ladder", "s": "Withdrawn ladder; LEARNS test active", "note": "Sunglasses are linear polarizers. Shutter 3D is not chiral. Polarizers absorb. Cite Zhao et al. 2009 on chiral Casimir.", "c": "W"}, {"n": 28, "t": "Gödel's Frame", "s": "Revised", "note": "Rotating objects versus rotating frames distinguished. Frames are not incomplete. The birthday gift was Gödel's to Einstein.", "c": "R"}, {"n": 29, "t": "The Shape of Things", "s": "Revised", "note": "The title \"The Universe\" is D.T. Suzuki's, not Sengai's. Triangle chirality withdrawn. \"Frameworks are geometries\" stands.", "c": "R"}, {"n": 30, "t": "One Is The Loneliest Number", "s": "Withdrawn diagnosis", "note": "R9. Replaced by the matched-capacity test.", "c": "W"}, {"n": 31, "t": "Cause From Inside", "s": "Stands", "note": "Cite Hofstadter (1979, 2007). Kim's exclusion argument becomes an Open hole.", "c": "S"}, {"n": 32, "t": "The Trans-Aetheric Whole", "s": "Revised", "note": "Gage is weak evidence (Macmillan 2000). Personality changes with age (Roberts et al. 2006). Fine-tuning captures style more than facts.", "c": "R"}, {"n": 33, "t": "Full Fidelity Resumption", "s": "Revised", "note": "Chain of thought is a narrated layer, not the processing itself (Turpin et al. 2023; Lanham et al. 2023; Chen et al. 2025). Behavior does not identify weights.", "c": "R"}, {"n": 34, "t": "The Intrinsic Specialness of Man", "s": "Revised; Obs. 5 withdrawn", "note": "The core is supported by double empathy and neurodiversity research. The self-sealing gate argument is withdrawn. \"Neurotypical\" is not a DSM category.", "c": "R"}, {"n": 35, "t": "The Multiversal Universe", "s": "Revised", "note": "The total-energy point stands, on GR grounds. Beyond the horizon is not \"unstructured.\" Eternal-inflation bubbles share a spacetime (Feeney et al. 2011 searched for collisions).", "c": "R"}, {"n": 36, "t": "How The Spiral Got Its Arms", "s": "Revised", "note": "Lin–Shu density waves stand. The invariant is withdrawn (R10). Sink handedness is not Coriolis. Magnetosphere compression is ram pressure. The Parker spiral is a real nearby spiral.", "c": "R"}, {"n": 37, "t": "The Token Ring", "s": "Withdrawn as physics", "note": "The vacuum is not a medium (Lorentz invariance; Michelson–Morley). Resonant coupling is strong only in the near field. Observed vacuum energy is about 5 × 10⁻¹⁰ J/m³ (computed). The real cousin is the toroidal \"flying doughnut\" pulse (Hellwarth & Nouchi 1996). The Immaterium is retained as analogy.", "c": "W"}, {"n": 38, "t": "Down The Drain", "s": "Withdrawn as physics", "note": "The \"trumpet\" is a graph of size against time, not a shape in space. The torus-universe test was done: no matched \"circles in the sky\" (Cornish, Spergel & Starkman 1998; WMAP; Planck). The Standard Model's CP violation is far too small to explain the asymmetry. §6's honesty is credited.", "c": "W"}, {"n": 39, "t": "The Unified Substrate", "s": "Stands (as literature)", "note": "Not independent sources (§VI.10). The Oathgate as accumulated state is a good literary reading. Entropy-gate crossing has no physical content. Citation numbers to be fixed.", "c": "S"}, {"n": 40, "t": "Reality Is Super Natural", "s": "Stands; chaos-magic mechanism withdrawn", "note": "The prior move stands, with Jones 2000 and Mayor 2000 as prior art. \"Intent produces effects exceeding chance\" is not supported (Ganzfeld; Bem 2011 replications). The psychological reading stands.", "c": "S"}, {"n": 41, "t": "Zero-Point Not Point-Less", "s": "Withdrawn as physics", "note": "R6: the zero point is where the energy ladder ends, not a reservoir. Only energy differences are physical in QFT (Jaffe 2005 on Casimir). The Torricelli and Guericke history is lovely and retained.", "c": "W"}, {"n": 42, "t": "The Torus Diode", "s": "Withdrawn as physics", "note": "The Deborah number stands. A 1 kg helix perturbs the metric by about 7 × 10⁻²⁸ (computed). A transformer needs a source. The solar wind's magnetic orientation (Bz) matters (Dungey 1961).", "c": "W"}, {"n": 43, "t": "The Fluidic Shift", "s": "Withdrawn as physics", "note": "Volovik is the prior art. Coherence is not simultaneity. Vortex nucleation costs energy. A static Casimir force does no persistent work.", "c": "W"}, {"n": 44, "t": "The Platform Problem", "s": "Withdrawn as physics", "note": "A helix rotating about its axis sweeps a cylinder, not a torus. Lense–Thirring from a 1 t, 100 rev/s cylinder is about 5 × 10⁻²² rad/s. The Barnett field is about 4 × 10⁻⁹ T, along the axis (computed). Tipler (1974) is the prior art, and Hawking (1992) brings it back to R3. OH 9.4 (a channel out is a channel in) is a responsible open hole to name.", "c": "W"}, {"n": 45, "t": "Down Is Subjective", "s": "Revised", "note": "The self-correction toward an extra input is credited, and the tornado-shear entry is right. Funnel clouds form aloft without a floor. The \"minimum-impedance neck\" is withdrawn.", "c": "R"}, {"n": 46, "t": "Not To Scale", "s": "Withdrawn as physics", "note": "R11. Sengai died in 1837, about forty years before Plateau and Rayleigh. Quantum-gravity divergences come from dimensionful G.", "c": "W"}, {"n": 47, "t": "The Casimiric Drill", "s": "Revised", "note": "The prediction stands as an estimate of about 10⁻³⁵ (computed): real in principle, unmeasurable in practice. The \"one device\" identification is withdrawn (R11). Cite Somers et al. 2018.", "c": "R"}, {"n": 48, "t": "The Kaluza-Klein Bottle Episode", "s": "Revised", "note": "The KK summary stands. The compact radius is fixed by e and G (Klein), so it cannot be scale-absent. A circle is not a genus-1 surface. The tori in fusion machines come from Poincaré–Hopf.", "c": "R"}, {"n": 49, "t": "The Grand Stage", "s": "Revised", "note": "The problem of time stands, with its literature. The roles are reversed: QFT has time evolution and microcausality built in, and GR's manifold is the whole 4D history. The score reading is withdrawn (R8). Divergences: Goroff & Sagnotti 1986.", "c": "R"}, {"n": 50, "t": "Getting Loopy", "s": "Revised", "note": "Euclidean Maxwell and Matsubara stand. Two different circles are conflated: Matsubara's (Euclidean time at finite temperature) and Kaluza–Klein's (an extra spatial dimension). Using one radius for both temperature and mass implies mc² = 2πkT for every particle, about 0.16 eV at 300 K (computed). W and Z are gauge bosons. T* is a corpus parameter, not saddle-point physics. Cite Osterwalder–Schrader.", "c": "R"}, {"n": 51, "t": "The Strong Spiral", "s": "Revised", "note": "The confinement phenomenology stands. Mesons are two-body colour singlets, and pentaquarks exist (LHCb 2015). The singlet is fully antisymmetric, not \"clockwise.\" QCD's real handedness question is the strong CP problem (Peccei & Quinn 1977).", "c": "R"}, {"n": 52, "t": "Chromatic D20", "s": "Revised", "note": "Witten 1981 is credited. Center symmetry is the other way round: unbroken in the confined phase, broken in the deconfined phase (Polyakov 1978; Susskind 1979). McKay maps Z₃ to A₂, not A₃. Triality is credited. Cite Lisi 2007 and Distler & Garibaldi 2010 on E8.", "c": "R"}, {"n": 53, "t": "The Born Identity", "s": "Revised", "note": "Parseval gives normalization, not the Born rule. Gleason (1957) is the real theorem. Einselection stands. \"Dissolves the measurement problem\" becomes \"an Everettian position.\"", "c": "R"}, {"n": 54, "t": "Wibbly Wobbly, Timey Wimey", "s": "Withdrawn as physics", "note": "R12. Sengai's shapes stand side by side. Photons carry two polarization states.", "c": "W"}, {"n": 55, "t": "The Digon", "s": "Revised", "note": "SU(2)/U(1) = S² and the stabilizer picture stand. The photon mixes with hypercharge. Kobayashi–Maskawa and Nν stand. The Standard Model's CP violation is too small to account for the asymmetry. Electromagnetism is not chiral. Cite Georgi–Quinn–Weinberg for OH 55.1.", "c": "R"}, {"n": 56, "t": "WE Accidentally The Whole Universe", "s": "Withdrawn as physics", "note": "Disk area over sphere area has no geometric meaning. The SU(5) facts and the explicit falsifiability section are credited.", "c": "W"}, {"n": 57, "t": "The Straw That Broke The Camel's Back", "s": "Revised", "note": "E10 and BKL stand. \"No 241st vector\" is the kissing number (Odlyzko & Sloane 1979), and Viazovska (2016) proved the packing. BKL is chaotic, not smooth. The TOV/E8 bridge is withdrawn.", "c": "R"}, {"n": 58, "t": "The Iwata Sequence", "s": "Withdrawn as physics", "note": "The running is not mass-weighted (§IV). The target is guaranteed to be hit. The Pati–Salam \"1/4\" is unverified. The dedication is retained.", "c": "W"}, {"n": 59, "t": "Circle Takes The Square", "s": "Withdrawn as physics", "note": "Residual zero by construction (§IV). The fitted scale (about 3.7 TeV) is retained as an arithmetic fact about the input, not a prediction.", "c": "W"}, {"n": 60, "t": "3 And 8 Aren't So Different After All", "s": "Stands", "note": "Fix b3 = −(11/3)·N + (2/3)·nf with N = 3, which gives −7. The Z mixes W³ with B.", "c": "S"}, {"n": 61, "t": "Forming Fermat From First... Principles", "s": "Withdrawn as physics", "note": "Fitted input; 14% look-elsewhere (computed). 17 is the third Fermat prime. The subtitle's honesty is credited.", "c": "W"}, {"n": 62, "t": "Trumpet Angle", "s": "Withdrawn as physics", "note": "Constructibility is a fact about compass-and-straightedge algebra, not about physics. Heptagons exist.", "c": "W"}, {"n": 63, "t": "Feynman's Ghost And Pauli The Wolf", "s": "Withdrawn as physics", "note": "§V. The τ prediction is Koide's. Brannen 2006 is a viXra preprint. The two-square uniqueness of 137 is true, and the Feynman and Pauli history is correct.", "c": "W"}, {"n": 64, "t": "Bounce It Like Newton", "s": "Withdrawn as physics", "note": "The masses are at mixed scales (276 at MZ, computed). The neutron–proton chain is retained (Borsanyi 2015).", "c": "W"}, {"n": 65, "t": "What's The Antimatter?", "s": "Withdrawn as physics", "note": "Antihydrogen has been trapped and measured (ALPHA 2011, 2018). Large antimatter domains nearby are excluded (Cohen, De Rújula & Glashow 1998). The fact that the top quark decays before hadronizing stands.", "c": "W"}, {"n": 66, "t": "Digon-ally", "s": "Withdrawn as physics", "note": "Units: the sum is 19.09 in radians (computed).", "c": "W"}, {"n": 67, "t": "Goodness! Gracious! Glueballs Are Real!", "s": "Revised", "note": "The glueball physics stands as a strong candidate, not confirmed pure glue. The black-hole leg rests on R1. Prior art for force bound by itself: Wheeler's geons (1955).", "c": "R"}, {"n": 68, "t": "404 Not Found", "s": "Withdrawn as physics", "note": "All energy gravitates (equivalence principle; MICROSCOPE; lunar laser ranging). A Higgs vacuum energy would have p = −ρ, which is exactly the form of Λ. The gap is about 55 orders, not 120 (computed). The question becomes an Open hole with real company: unimodular gravity, degravitation (Dvali, Hofmann & Khoury 2007), and sequestering (Kaloper & Padilla 2014).", "c": "W"}, {"n": 69, "t": "Nice", "s": "Withdrawn as physics", "note": "The prediction missed by 10⁷ (§V), and making it is credited. The golden angle (137.508°) is a packing angle (Douady & Couder 1992). The title is retained, because it is funny.", "c": "W"}, {"n": 70, "t": "Oh Hey", "s": "Revised", "note": "Colour entanglement stands. \"Confinement = entanglement\" is withdrawn: helium's spin singlet is entangled and not confined, and mesons are entangled too. Look Around You's requirement concerns matter–geometry separability, a different tensor split.", "c": "R"}, {"n": 71, "t": "If;Else Screening", "s": "Withdrawn as physics", "note": "A homogeneous VEV has Tμν = −V gμν, which is exactly the \"fluid\" type. OH 71.2 (other vacuum condensates) is a good question.", "c": "W"}, {"n": 72, "t": "223 Is Meaningless Without 137", "s": "Withdrawn as physics", "note": "Angles read off a hand drawing encode the drawing. Credit for reporting 116.4°.", "c": "W"}, {"n": 73, "t": "Gravity Schmavity", "s": "Stands", "note": "Fix: the Standard Model has no graviton, and the Yang–Mills gap is unrelated to \"zero-energy\" arguments.", "c": "S"}, {"n": 74, "t": "A Maxwell's Angel's Thesis", "s": "Revised", "note": "The projection instinct stands, with ADD and Randall–Sundrum credited. The arc partition is withdrawn: the golden angle is not α⁻¹, and the φ ratio holds by definition.", "c": "R"}, {"n": 75, "t": "The Spiral Invariant At Substrate Level", "s": "Withdrawn as physics", "note": "Cite Smolin 1992. An expanding universe is not a fixed point.", "c": "W"}, {"n": 76, "t": "A Cube Knows What It's Missing", "s": "Withdrawn as physics", "note": "Colour is not charge. The real \"three and thirds\" link is anomaly cancellation (computed). God's Number depends on the move metric (20 or 26).", "c": "W"}, {"n": 77, "t": "Unrealistic Beauty Standards In Quark Generations", "s": "Withdrawn as physics", "note": "The mediating force sets a lifetime (computed). Baryons decay too. A cube is achiral. The title is retained.", "c": "W"}, {"n": 78, "t": "Spooky Scary Skeletons", "s": "Withdrawn as proof", "note": "R13. The statement of the Clay problem is retained.", "c": "W"}, {"n": 79, "t": "Making Some Pudding", "s": "Withdrawn as proof", "note": "The scaffold and the bookkeeping are retained as a map of what a proof needs. Cite Balaban.", "c": "W"}, {"n": 80, "t": "Vacuumite", "s": "Revised", "note": "The result is reported accurately, though its authors call it tentative. α does not run at keV energies. \"Nonlinear optical medium\" (Heisenberg–Euler) replaces \"crystal.\"", "c": "R"}, {"n": 81, "t": "The Heart Of The Chart", "s": "Revised", "note": "The Smith-chart physics stands. Results 7.1 and 7.2 are identities true at any angle (computed). Reading α as a reflection coefficient is withdrawn.", "c": "R"}, {"n": 82, "t": "The Completely Reasonable Effectiveness…", "s": "Stands (philosophy)", "note": "Cite Tegmark. Wigner's narrower puzzle (compressibility) is kept as an open hole.", "c": "S"}, {"n": 83, "t": "Punch The Unpunchable", "s": "Revised", "note": "The three failure modes stand. A fourth is added (§IV.4). The Dissolution Table's physics rows are withdrawn.", "c": "R"}, {"n": 84, "t": "The Trebuchet Model…", "s": "Revised", "note": "The provenance statement is model practice. Proton stability comes from baryon number. 17 is the third Fermat prime.", "c": "R"}, {"n": 85, "t": "Cavity Search", "s": "Withdrawn as physics", "note": "Cite Coleman 1977. Nucleation barriers are continuous. The early universe expanded.", "c": "W"}, {"n": 86, "t": "Pirates Of Dark Matter", "s": "Withdrawn as physics", "note": "Cite Berezhiani & Khoury. Vortices add no mass. Galaxies that barely rotate, and galaxy clusters, still need dark matter. Frame dragging is ~(v/c)² ≈ 5 × 10⁻⁷ (computed). §6 is retained as a model.", "c": "W"}, {"n": 87, "t": "What The Drill Hits", "s": "Revised", "note": "The question stands. The criterion is replaced by Lakatos's external test.", "c": "R"}, {"n": 88, "t": "No Free Endpoints", "s": "Withdrawn as physics", "note": "Banks–Zaks and Polyakov counterexamples. The photon couples to every charge.", "c": "W"}, {"n": 89, "t": "Pixie Put Jellyfish In My Head", "s": "Withdrawn as physics", "note": "\"Treat the galaxy as one object\" is already standard galactic dynamics, and the curve still falls without extra mass. Stars feel no drag. MOND is the \"no new substance\" prior art. The jellyfish image is retained.", "c": "W"}, {"n": 90, "t": "The Panmorphus Aether", "s": "Revised", "note": "The Einstein-1920 core stands. If it has energy, it is Λ. Superfluid and Lorentz invariance conflict.", "c": "R"}, {"n": 91, "t": "What Part Of 'Invariant' Implied Variation?", "s": "Withdrawn as physics", "note": "A rigid disc shows no recession (computed). Distance is not time. p = −ρ accelerates (computed). Credit for a falsifiable bet on DESI's w. Fix the placeholder DESI citation (DR2: arXiv:2503.14738).", "c": "W"}, {"n": 92, "t": "Cause And Effect", "s": "Withdrawn as physics", "note": "ANITA's anomalous events are air-shower-like, not Askaryan cascades in ice. Auger, IceTop and KM3NeT contradict the interface rule. The PUEO predictions are retained.", "c": "W"}, {"n": 93, "t": "It's Not The Size Of The Boat…", "s": "Withdrawn as physics", "note": "Energy from nowhere. Noether. 2.73 ≈ e is numerology.", "c": "W"}, {"n": 94, "t": "…The 5th Dimension Is Where Constructable Polygons Live", "s": "Withdrawn as physics", "note": "Choosing an orientation cannot change topology (Euler characteristic 2 vs 0). Constructible n also includes 4, 6, 8, 10, …", "c": "W"}, {"n": 95, "t": "Triangles Again, Y'all", "s": "Withdrawn as physics", "note": "One number plus two placeholders. An EeV transition sits at z ~ 4 × 10²¹, far outside DESI's range (computed).", "c": "W"}, {"n": 96, "t": "Neat", "s": "Withdrawn as physics", "note": "§V. The computation is retained as honest arithmetic.", "c": "W"}, {"n": 97, "t": "Four-eign Affairs", "s": "Revised", "note": "The mathematics stands. Base 4 misses F0 = 3. OH 97.2 is closed (§V). 257 − 120 and 257 − 17 are withdrawn.", "c": "R"}, {"n": 98, "t": "May The Fourth Be With You", "s": "Withdrawn as physics", "note": "223/137 is not a convergent of φ (computed). The four \"paths\" are not independent. The citation must be fixed (§VII.16).", "c": "W"}, {"n": 99, "t": "Irrational, As It Turns Out, Is Still Perfectly Logical", "s": "Revised: mathematics stands, physics withdrawn", "note": "The golden-angle algebra and Hurwitz stand, and so does the title's point. \"Rationals cannot reach irrationals\" and the direction of running are wrong.", "c": "R"}, {"n": 100, "t": "Back to Basics", "s": "Revised", "note": "Pati–Salam and 3-3-1 credited. t → bW scales as mt³, not m⁵ (Γ ≈ 1.5 GeV, computed). The Standard Model already conserves baryon number without a GUT. R2 removed.", "c": "R"}, {"n": 101, "t": "Video Thrilled The Radio Star", "s": "Withdrawn as physics", "note": "Light quarks are not pinned to a colour; the baryon is antisymmetric over colours. Top colour behaves like any quark's (ATLAS 2015), and CMS and ATLAS reported a 2025 threshold excess consistent with quasi-bound toponium. Credit for correcting 100 the next day. The metaphor is retained.", "c": "W"}, {"n": 102, "t": "What Is > What If", "s": "Stands (philosophy)", "note": "Necessitarianism (Spinoza). \"Accidental symmetry\" is technical (§VI). Counterfactuals are how causes are defined (Pearl 2000; Woodward 2003).", "c": "S"}, {"n": 103, "t": "One Trick Pony", "s": "Revised", "note": "Prior art credited (§II). Planets are round by minimizing potential energy; universality comes from RG flow (Wilson). The burden flip is withdrawn.", "c": "R"}, {"n": 104, "t": "Commons Sense", "s": "Revised", "note": "Actualism credited. The pentagon's diagonal-to-side ratio is exactly φ (computed), so integer geometry does produce irrationals.", "c": "R"}, {"n": 105, "t": "If Your Explanation Is Impossible…", "s": "Withdrawn as physics", "note": "§IV. The OMG event facts and the shower-as-observation point are retained.", "c": "W"}, {"n": 106, "t": "Not To Rain On Your Parade", "s": "Withdrawn as physics", "note": "§IV. The testable open holes are retained and credited. Local dark matter in a ~90 m cube holds one OMG event's energy (computed): an interesting number, not a mechanism.", "c": "W"}, {"n": 107, "t": "The Biology Protocol", "s": "Revised", "note": "The triad stands. One example of life doesn't flip the prior. The fire triangle is heat, fuel and oxygen.", "c": "R"}, {"n": 108, "t": "Voyage On The Electron Sea", "s": "Revised", "note": "Ewald–Oseen stands. Refraction is not absorb-and-re-emit (Feynman Vol. I ch. 31). α is a coupling, not a fraction or an angle. Gold's colour is relativistic.", "c": "R"}, {"n": 109, "t": "BASIC Physics", "s": "Revised", "note": "Retained as a teaching metaphor, labelled as such. R2 lines removed.", "c": "R"}, {"n": 110, "t": "SN1987A Used Bubble Beam!", "s": "Stands", "note": "OH 110.4 answered (§II). Neutrinos pass through matter because they carry no charge or colour, not because of \"phase commitment\".", "c": "S"}, {"n": 111, "t": "Eleventy-One", "s": "Revised", "note": "Okun credited. Invariant mass is defined in any state of motion; \"rest\" is not a state that must exist.", "c": "R"}, {"n": 112, "t": "We Swear, The Triangle Is Load-Bearing", "s": "Withdrawn as physics", "note": "The KM history and unitarity triangles stand as exposition. J ≈ 3 × 10−5 (computed). §IV, §III.", "c": "W"}, {"n": 113, "t": "Non-Assumptive GR", "s": "Withdrawn as physics", "note": "Corrections in Paper 124.", "c": "W"}, {"n": 114, "t": "Three Quarks For Muster Mark", "s": "Withdrawn as physics", "note": "§III. Δm² values and the Majorana question are correct; ROM is retained as a picture of a basis change.", "c": "W"}, {"n": 115, "t": "A Mirror Quarkly", "s": "Withdrawn as physics", "note": "§IV. The seed, the title, OH 115.4 and the honestly labelled preon prediction are retained.", "c": "W"}, {"n": 116, "t": "Einstein Wasn't Wrong", "s": "Withdrawn as physics", "note": "Corrections in Paper 124 and §IV. The limits chain and the classical-test numbers (42.98″, 1.751″, computed) are retained.", "c": "W"}, {"n": 117, "t": "(photon as helical column)", "s": "Withdrawn as physics", "note": "§III. Redshift as stretching is fine for cosmological redshift.", "c": "W"}, {"n": 118, "t": "(beauty as invariant recognition)", "s": "Stands", "note": "Cite processing fluency and compression progress.", "c": "S"}, {"n": 119, "t": "(effective photon mass)", "s": "Withdrawn as physics", "note": "§IV.", "c": "W"}, {"n": 120, "t": "(photon rest mass \"undefined\")", "s": "Revised", "note": "m = 0 is defined; the rest frame is not (§VI).", "c": "R"}, {"n": 121, "t": "(aesthetics and consonance)", "s": "Revised", "note": "Symmetry preference is well documented. Consonance preference is partly cultural: the Tsimane' rate consonant and dissonant chords alike (McDermott et al. 2016).", "c": "R"}, {"n": 122, "t": "Estate Planning For The Black Hole", "s": "Withdrawn as physics", "note": "§IV. Cite the gravastar and Dymnikova.", "c": "W"}, {"n": 123, "t": "(asymptotic flatness vs Bell)", "s": "Withdrawn as physics", "note": "Bell nonlocality concerns correlations between outcomes and holds in flat space. The jargon point is retained and credited.", "c": "W"}];
+const NS="http://www.w3.org/2000/svg", svg=document.getElementById('chart');
+const W=1200,H=760;
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);(p||svg).appendChild(e);return e}
+let seed=96;function rnd(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646}
+function noise1(x,s){return Math.sin(x*1.7+s)*.5+Math.sin(x*3.9+s*2.1)*.27+Math.sin(x*9.3+s*.7)*.13+Math.sin(x*19.7+s*3.3)*.06}
+
+// ---------- defs ----------
+const defs=el('defs',{});
+const pat=el('pattern',{id:'hatch',width:6,height:6,patternUnits:'userSpaceOnUse',patternTransform:'rotate(35)'},defs);
+el('line',{x1:0,y1:0,x2:0,y2:6,stroke:'var(--land-edge)','stroke-width':.6,opacity:.35},pat);
+
+// ---------- frame & graticule ----------
+el('rect',{x:0,y:0,width:W,height:H,fill:'var(--paper)'});
+const g0=el('g',{});
+for(let x=0;x<=W;x+=100)el('line',{x1:x,y1:0,x2:x,y2:H,stroke:'var(--ink)','stroke-width':.25,opacity:.25},g0);
+for(let y=0;y<=H;y+=95)el('line',{x1:0,y1:y,x2:W,y2:y,stroke:'var(--ink)','stroke-width':.25,opacity:.25},g0);
+// border scale ticks
+for(let x=0;x<=W;x+=10){const h=x%100===0?9:x%50===0?6:3;el('line',{x1:x,y1:0,x2:x,y2:h,stroke:'var(--ink)','stroke-width':.6});el('line',{x1:x,y1:H,x2:x,y2:H-h,stroke:'var(--ink)','stroke-width':.6})}
+for(let y=0;y<=H;y+=9.5){const h=Math.round(y/9.5)%10===0?9:3;el('line',{x1:0,y1:y,x2:h,y2:y,stroke:'var(--ink)','stroke-width':.6});el('line',{x1:W,y1:y,x2:W-h,y2:y,stroke:'var(--ink)','stroke-width':.6})}
+
+// ---------- coast (top) ----------
+function coastY(x){return 92+noise1(x/90,1.3)*34+noise1(x/23,4.1)*7}
+let d='M0,0 ';for(let x=0;x<=W;x+=4)d+=`L${x},${coastY(x).toFixed(1)} `;d+=`L${W},0 Z`;
+// shoal bands under land
+for(const [off,col] of [[58,'var(--shoal2)'],[30,'var(--shoal)']]){
+  let s='M0,0 ';for(let x=0;x<=W;x+=4)s+=`L${x},${(coastY(x)+off+noise1(x/40,off)*8).toFixed(1)} `;s+=`L${W},0 Z`;
+  el('path',{d:s,fill:col});
+}
+// depth contour (dotted)
+let c10='';for(let x=0;x<=W;x+=4)c10+=(x?'L':'M')+`${x},${(coastY(x)+58+noise1(x/40,58)*8).toFixed(1)} `;
+el('path',{d:c10,fill:'none',stroke:'var(--ink)','stroke-width':.6,'stroke-dasharray':'1 3',opacity:.6});
+el('path',{d,fill:'var(--land)',stroke:'var(--land-edge)','stroke-width':1.4});
+el('path',{d,fill:'url(#hatch)'});
+// port
+const px=70,py=coastY(70);
+el('circle',{cx:px,cy:py-14,r:3.2,fill:'var(--ink)'});
+const pt=el('text',{x:px+8,y:py-26,'font-size':15,'font-style':'italic',fill:'var(--ink)'});pt.textContent='Port Why';
+const pt2=el('text',{x:px+8,y:py-11,'font-size':9,fill:'var(--ink-soft)','letter-spacing':'1.5'});pt2.textContent='EST. JULY 2026';
+// a little island of established physics, lower right
+function blob(cx,cy,r,s){let p='';for(let i=0;i<=64;i++){const a=i/64*Math.PI*2,rr=r*(1+noise1(a*1.3,s)*.32);p+=(i?'L':'M')+(cx+Math.cos(a)*rr).toFixed(1)+','+(cy+Math.sin(a)*rr*.62).toFixed(1)}return p+'Z'}
+
+// ---------- survey lines (route) ----------
+const vols=[{name:'The Chakram',n:35},{name:'The Spiral',n:34},{name:'The Drill',n:30},{name:'In Progress, and 115–123',n:24}];
+const rows=[220,365,510,655], xL=95, xR=1105;
+const pts=[];let idx=0;
+vols.forEach((v,i)=>{
+  const ltr=i%2===0;
+  for(let k=0;k<v.n;k++){
+    const f=v.n===1?0:k/(v.n-1);
+    const x=ltr? xL+f*(xR-xL) : xR-f*(xR-xL);
+    const y=rows[i]+noise1(x/70,i*2.7)*16;
+    pts.push({x,y,vol:i,...DATA[idx++]});
+  }
+});
+// route path with turns
+let rp=`M${px},${py-14} C ${px+10},${py+60} ${pts[0].x-30},${pts[0].y-60} ${pts[0].x},${pts[0].y} `;
+for(let i=1;i<pts.length;i++){
+  const a=pts[i-1],b=pts[i];
+  if(a.vol!==b.vol){const side=a.x>600?1:-1;const bx=a.x+side*70;rp+=`C ${bx},${a.y} ${bx},${b.y} ${b.x},${b.y} `}
+  else rp+=`L${b.x.toFixed(1)},${b.y.toFixed(1)} `;
+}
+// (island + soundings drawn before route so route sits above)
+el('path',{d:blob(1035,724,70,7),fill:'var(--shoal)'});
+el('path',{d:blob(1040,728,44,7),fill:'var(--land)',stroke:'var(--land-edge)','stroke-width':1.2});
+const isl=el('text',{x:1000,y:732,'font-size':10.5,'font-style':'italic',fill:'var(--ink)'});isl.textContent='The Literature';
+// soundings
+const taken=pts.map(p=>[p.x,p.y]);
+let sCount=0;
+const avoid=[[85,172,310,202],[860,330,1120,358],[85,462,310,492],[860,605,1135,635],[838,94,1120,228],[20,655,340,755]];
+while(sCount<105){
+  const x=30+rnd()*1140,y=150+rnd()*590;
+  if(y<coastY(x)+40)continue;
+  if(taken.some(([a,b])=>Math.abs(a-x)<20&&Math.abs(b-y)<22))continue;
+  if(Math.hypot(x-1035,(y-724)*1.5)<90)continue;
+  if(avoid.some(([a,b,c,e])=>x>a&&x<c&&y>b&&y<e))continue;
+  if(x>1150&&y>240&&y<670)continue;
+  const depth=Math.round(8+ (y-150)/590*60 + rnd()*14);
+  const t=el('text',{x,y,'font-size':8.5,'font-style':'italic',fill:'var(--ink-soft)','text-anchor':'middle'});
+  t.textContent=depth; sCount++;
+}
+el('path',{d:rp,fill:'none',stroke:'var(--route)','stroke-width':1.3,'stroke-dasharray':'7 4',opacity:.85});
+// leg labels
+vols.forEach((v,i)=>{
+  const ltr=i%2===0;const y=rows[i]-30;
+  const t=el('text',{x:ltr?xL:xR,y,'font-size':10,'letter-spacing':'2','text-anchor':ltr?'start':'end',fill:'var(--route)'});
+  t.textContent=`VOL. ${['I','II','III','IV'][i]} · ${v.name.toUpperCase()} ${ltr?'→':'←'}`;
+});
+
+// ---------- symbols ----------
+const COL={S:'var(--magenta)',R:'var(--ink)',C:'var(--ink)',W:'var(--danger)'};
+const LABEL={S:'Stands — a light',R:'Revised — a buoy',C:'Conditional — existence doubtful',W:'Withdrawn as physics — a charted wreck'};
+function symbol(g,c,x,y){
+  if(c==='S'){ // light: dot + magenta flare
+    el('path',{d:`M${x},${y} L${x+5},${y-17} Q${x+8},${y-19} ${x+7},${y-15} Z`,fill:'var(--magenta)',opacity:.9},g);
+    el('circle',{cx:x,cy:y,r:3.2,fill:'var(--magenta)'},g);
+    el('circle',{cx:x,cy:y,r:5.5,fill:'none',stroke:'var(--magenta)','stroke-width':.8},g);
+  } else if(c==='R'){ // buoy: lozenge on a stalk with a small circle
+    el('line',{x1:x,y1:y+4,x2:x,y2:y-3,stroke:'var(--ink)','stroke-width':1},g);
+    el('path',{d:`M${x},${y-12} L${x+4},${y-6} L${x},${y-1} L${x-4},${y-6} Z`,fill:'var(--paper)',stroke:'var(--ink)','stroke-width':1},g);
+    el('ellipse',{cx:x,cy:y+5,rx:4.5,ry:1.8,fill:'none',stroke:'var(--ink)','stroke-width':.8},g);
+  } else if(c==='C'){ // ED: existence doubtful
+    el('circle',{cx:x,cy:y,r:9,fill:'none',stroke:'var(--ink)','stroke-width':.9,'stroke-dasharray':'1.5 2'},g);
+    const t=el('text',{x:x,y:y+3.2,'font-size':8.5,'text-anchor':'middle','font-style':'italic',fill:'var(--ink)'},g);t.textContent='ED';
+  } else { // dangerous wreck
+    el('circle',{cx:x,cy:y,r:10,fill:'var(--shoal2)',opacity:.7},g);
+    el('circle',{cx:x,cy:y,r:10,fill:'none',stroke:'var(--danger)','stroke-width':.8,'stroke-dasharray':'1.2 2'},g);
+    el('line',{x1:x-7,y1:y,x2:x+7,y2:y,stroke:'var(--danger)','stroke-width':1.3},g);
+    for(const dx of [-3.5,0,3.5])el('line',{x1:x+dx,y1:y-3.2,x2:x+dx,y2:y+3.2,stroke:'var(--danger)','stroke-width':1.1},g);
+  }
+}
+const notice=document.getElementById('notice');
+let pinned=null;
+function show(p){
+  notice.innerHTML='';
+  const h=document.createElement('h2');h.textContent=`NOTICE TO MARINERS · No. ${p.n} · Vol. ${['I','II','III','IV'][p.vol]}`;
+  const t=document.createElement('div');t.className='t';t.textContent=p.t;
+  const s=document.createElement('div');s.className='s';s.textContent=`${p.s}  —  ${LABEL[p.c].split(' — ')[1]}`;
+  const n=document.createElement('p');n.textContent=p.note;
+  notice.append(h,t,s,n);
+}
+const marks=[];
+pts.forEach(p=>{
+  const g=el('g',{class:'mark',tabindex:0,role:'button','aria-label':`Paper ${p.n}, ${p.t}: ${p.s}`});
+  el('circle',{class:'halo',cx:p.x,cy:p.y,r:15,fill:'none',stroke:'var(--route)','stroke-width':1.2},g);
+  el('circle',{cx:p.x,cy:p.y,r:14,fill:'transparent'},g);
+  symbol(g,p.c,p.x,p.y);
+  const lab=el('text',{x:p.x,y:p.y+(p.c==='S'?18:20),'font-size':7.5,'text-anchor':'middle',fill:'var(--ink-soft)'},g);lab.textContent=p.n;
+  const on=()=>{if(!pinned)show(p)};
+  g.addEventListener('mouseenter',on);g.addEventListener('focus',()=>{show(p)});
+  g.addEventListener('click',()=>{marks.forEach(m=>m.classList.remove('on'));if(pinned===p){pinned=null}else{pinned=p;g.classList.add('on');show(p)}});
+  g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();g.dispatchEvent(new Event('click'))}});
+  marks.push(g);
+});
+
+// ---------- cartouche (title) ----------
+const cg=el('g',{});
+el('rect',{x:30,y:672,width:290,height:74,fill:'var(--paper2)',stroke:'var(--ink)','stroke-width':1.2},cg);
+el('rect',{x:34,y:676,width:282,height:66,fill:'none',stroke:'var(--ink)','stroke-width':.5},cg);
+let t1=el('text',{x:175,y:698,'font-size':17,'text-anchor':'middle','letter-spacing':'3',fill:'var(--ink)'},cg);t1.textContent='CHARTED WRECKS';
+let t2=el('text',{x:175,y:714,'font-size':9.5,'text-anchor':'middle','font-style':'italic',fill:'var(--ink)'},cg);t2.textContent='The Corpus Waters, Papers 1–123';
+const cnt={S:0,R:0,C:0,W:0};DATA.forEach(r=>cnt[r.c]++);
+let t3=el('text',{x:175,y:731,'font-size':8.5,'text-anchor':'middle',fill:'var(--ink-soft)','letter-spacing':'.6'},cg);
+t3.textContent=`${cnt.S} lights · ${cnt.R} buoys · ${cnt.C} doubtful · ${cnt.W} wrecks, all charted`;
+
+// ---------- legend ----------
+const lg=el('g',{});
+const lx=860,ly=120;
+el('rect',{x:lx-12,y:ly-16,width:255,height:96,fill:'var(--paper2)',stroke:'var(--ink)','stroke-width':.8,opacity:.94},lg);
+[['S','Stands'],['R','Revised'],['C','Conditional (ED: existence doubtful)'],['W','Withdrawn as physics (wreck)']].forEach(([c,txt],i)=>{
+  const y=ly+i*21+4;symbol(lg,c,lx+6,y);
+  const t=el('text',{x:lx+24,y:y+3.5,'font-size':10,fill:'var(--ink)'},lg);t.textContent=txt;
+});
+
+// ---------- compass rose ----------
+const rx=1128,ry=68,cr=el('g',{opacity:.85});
+for(let i=0;i<32;i++){const a=i/32*Math.PI*2,r1=i%8===0?38:i%4===0?28:20;el('line',{x1:rx,y1:ry,x2:rx+Math.sin(a)*r1,y2:ry-Math.cos(a)*r1,stroke:'var(--ink)','stroke-width':i%8===0?1:.4},cr)}
+el('circle',{cx:rx,cy:ry,r:42,fill:'var(--land)',opacity:.0});el('circle',{cx:rx,cy:ry,r:42,fill:'none',stroke:'var(--ink)','stroke-width':.6},cr);
+el('circle',{cx:rx,cy:ry,r:46,fill:'none',stroke:'var(--magenta)','stroke-width':.6},cr);
+el('path',{d:`M${rx},${ry-40} L${rx+5},${ry} L${rx},${ry+6} L${rx-5},${ry} Z`,fill:'var(--ink)'},cr);
+const nt=el('text',{x:rx,y:ry-50,'font-size':11,'text-anchor':'middle',fill:'var(--ink)'},cr);nt.textContent='N';
+// flip-test note under the rose
+const ft=el('text',{x:rx-60,y:ry+16,'text-anchor':'end','font-size':9,'font-style':'italic',fill:'var(--ink)'});ft.textContent='check which way it points →';
+
+// ---------- sea-level note ----------
+const sl=el('text',{x:340,y:740,'font-size':8.5,'font-style':'italic',fill:'var(--ink-soft)'});
+sl.textContent='Note: each wreck lowers the sea very slightly. A sunk ship displaces its volume, not its weight.';
+
+// theme toggle (per-viewer convenience only)
+const root=document.documentElement;
+try{const s=localStorage.getItem('cw-theme');if(s)root.dataset.theme=s}catch(e){}
+document.getElementById('tt').onclick=()=>{
+  const dark=root.dataset.theme?root.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme=dark?'light':'dark';try{localStorage.setItem('cw-theme',root.dataset.theme)}catch(e){}
+};
+</script>
+</body>
+</html>
