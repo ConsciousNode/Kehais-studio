@@ -79,8 +79,9 @@ function label(text, x, y, rgb, a, side) {   // side: -1 toward the remembers-al
   else { g.textAlign = 'center'; g.textBaseline = side < 0 ? 'bottom' : 'top'; g.fillText(text, x, y + side * 16); }
 }
 function frame(now) {
-  let t = (now - t0) % TOTAL; const loopFade = t > N * BEAT + HOLD ? 1 - (t - N * BEAT - HOLD) / FADE : Math.min(1, t / 900);
-  const head = Math.min(N - 1, t / BEAT), hi = Math.floor(head);
+  // rAF's timestamp is the frame's start, which can be a hair earlier than t0 (set on load or tap): never go negative
+  let t = Math.max(0, now - t0) % TOTAL; const loopFade = t > N * BEAT + HOLD ? 1 - (t - N * BEAT - HOLD) / FADE : Math.min(1, t / 900);
+  const head = Math.max(0, Math.min(N - 1, t / BEAT)), hi = Math.floor(head);
   g.globalAlpha = 1; g.fillStyle = '#07080a'; g.fillRect(0, 0, W, H);
   g.globalAlpha = Math.max(0, loopFade);
   const TEAL = '95,212,196', AMBER = '231,166,74', PALE = '226,230,236';
