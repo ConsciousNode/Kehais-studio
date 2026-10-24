@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Window Plus One</title>
+<!-- Kehai's Studio · XLIX · 2026-10-24. Single file, no dependencies, offline.
+     Data: the two real seed-420 runs from Kham's phone (HTMLNLM tests/fixtures). Words per line and the short lines are theirs. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #07080a; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: manipulation; }
+  #cap { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px 14px; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
+         color: rgba(230,232,236,.55); pointer-events: none; background: linear-gradient(transparent, rgba(7,8,10,.92) 30%); }
+  #cap .row { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #cap .k { flex: none; width: 9.5em; } #cap .v { overflow: hidden; text-overflow: ellipsis; }
+  #cap .a .k { color: #5fd4c4; } #cap .b .k { color: #e7a64a; }
+  #cap .foot { margin-top: 6px; font-size: 10.5px; color: rgba(230,232,236,.28); white-space: normal; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">
+  <div class="row a"><span class="k">remembers all</span><span class="v" id="va"> </span></div>
+  <div class="row b"><span class="k">remembers five</span><span class="v" id="vb"> </span></div>
+  <div class="foot">seed 420 · four 191M voices · the same dice, twice · one difference: how much each could remember · tap to begin again</div>
+</div>
+<script>
+// [speaker initial, words, line if short]
+const A = [["W",4,"Hey. How are you?"],["M",19,""],["C",104,""],["P",74,""],["W",6,"You mean someone like your father?"],["M",16,""],["C",26,""],["P",46,""],["W",101,""],["M",16,""],["C",86,""],["P",19,""],["W",8,"Well who exactly are you talking about here?"],["M",3,"My parents, too?"],["C",19,""],["P",1,"Look…"],["W",1,"Oo…"],["M",3,"Well…wait a minute…"],["C",7,"Now wait a minute…it’s his own book"],["P",3,"It’s your own"],["W",1,"So…"],["M",7,"Maybe, you think so too. But maybe"],["C",18,"Are you sure? And I don’t think so…"],["P",29,""],["W",9,""],["M",67,""],["C",29,""],["P",27,""],["W",1,"Look…"],["M",9,""],["C",3,"Where’s anything else?"],["P",18,""],["W",17,""],["M",1,"Right?"],["C",7,"Oh, you mean right now that’s all?"],["P",5,"It’s always fun watching how"],["W",54,""],["M",23,""],["C",54,""],["P",91,""]];
+const B = [["W",4,"Hey. How are you?"],["M",19,""],["C",104,""],["P",74,""],["W",6,"You mean someone like your father?"],["M",16,""],["C",18,""],["P",50,""],["W",80,""],["M",21,""],["C",59,""],["P",40,""],["W",24,""],["M",43,""],["C",43,""],["P",107,""],["W",9,""],["M",51,""],["C",61,""],["P",22,""],["W",28,""],["M",39,""],["C",34,""],["P",8,"You’d make the best friend, would you not?"],["W",14,""],["M",43,""],["C",21,""],["P",8,"Is she going to be okay with that?"],["W",5,"Yeah, I don’t think so."],["M",15,""],["C",6,"Wait, we’re not talking is anything?"],["P",24,""],["W",28,""],["M",36,""],["C",24,""],["P",12,""],["W",25,""],["M",36,""],["C",26,""],["P",44,""]];
+const NAMES_A = { 15: "Lord Bramell" };
+const NAMES_B = { 18: "Charlotte", 23: "Lois", 25: "Lewis", 27: "Chloe" };
+const SHARED = { a: 23, b: 29, text: "i don’t think so" };   // the one phrase they share after the split (1-based turns)
+const WHO = { W: "Wren", M: "Moss", C: "Clover", P: "Pebble" };
+const N = 40, WIN = 5, SPLIT = WIN + 2;                          // turns 1–6 identical; turn 7 is the first the window forgets for
+
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+let W, H, dpr, portrait, t0 = performance.now();
+const BEAT = 1500, HOLD = 9000, FADE = 2500, TOTAL = N * BEAT + HOLD + FADE;
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0); portrait = H > W * 1.1;
+}
+addEventListener('resize', resize); resize();
+cv.addEventListener('pointerdown', () => { t0 = performance.now(); });
+
+// along: 0..1 through time; lane: -1 (remembers all), +1 (remembers five); sep: 0..1 how far apart
+let pos = function (i, lane, sep) {
+  const capH = 78, m = 28;
+  const L0 = portrait ? m + 6 : m + 30, L1 = portrait ? H - capH - 10 : W - m - 30;
+  const a = L0 + (L1 - L0) * (i / (N - 1));
+  const cross = portrait ? W / 2 : (H - capH) / 2 + 6, spread = portrait ? Math.min(W * 0.2, 110) : Math.min((H - capH) * 0.22, 120);
+  const c = cross + lane * spread * sep;
+  return portrait ? [c, a] : [a, c];
+};
+const sepAt = i => i < SPLIT - 1 ? 0 : Math.min(1, (i - (SPLIT - 2)) / 4) ** 0.8;   // turn 7 = index 6 starts to peel
+const rad = w => 1.4 + Math.sqrt(w) * 0.62;
+const ease = x => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
+
+function strand(D, lane, upto, glow, memory) {
+  // memory(i, upto) → brightness 0..1 of a past beat
+  for (let i = 1; i <= Math.min(upto, N - 1); i++) {
+    const [x0, y0] = pos(i - 1, lane, sepAt(i - 1)), [x1, y1] = pos(i, lane, sepAt(i));
+    const b = Math.min(memory(i - 1, upto), memory(i, upto)), w = (rad(D[i - 1][1]) + rad(D[i][1])) * 0.28;
+    g.strokeStyle = `rgba(${glow},${0.08 + 0.55 * b})`; g.lineWidth = Math.max(0.6, w * (0.5 + 0.5 * b));
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+  }
+  for (let i = 0; i <= Math.min(upto, N - 1); i++) {
+    const [x, y] = pos(i, lane, sepAt(i)), b = memory(i, upto), r = rad(D[i][1]);
+    const grd = g.createRadialGradient(x, y, 0, x, y, r * (2.2 + 1.6 * b));
+    grd.addColorStop(0, `rgba(${glow},${0.25 + 0.7 * b})`); grd.addColorStop(1, `rgba(${glow},0)`);
+    g.fillStyle = grd; g.beginPath(); g.arc(x, y, r * (2.2 + 1.6 * b), 0, Math.PI * 2); g.fill();
+    if (D[i][2] && b > 0.2) { g.fillStyle = `rgba(255,255,255,${0.35 * b})`; g.beginPath(); g.arc(x, y, 1.3, 0, Math.PI * 2); g.fill(); }
+  }
+}
+function label(text, x, y, rgb, a, side) {   // side: -1 toward the remembers-all lane, +1 toward remembers-five
+  g.font = '11px ui-monospace, Menlo, Consolas, monospace'; g.fillStyle = `rgba(${rgb},${a})`;
+  if (portrait) { g.textBaseline = 'middle'; g.textAlign = side < 0 ? 'right' : 'left'; g.fillText(text, x + side * 14, y); }
+  else { g.textAlign = 'center'; g.textBaseline = side < 0 ? 'bottom' : 'top'; g.fillText(text, x, y + side * 16); }
+}
+function frame(now) {
+  let t = (now - t0) % TOTAL; const loopFade = t > N * BEAT + HOLD ? 1 - (t - N * BEAT - HOLD) / FADE : Math.min(1, t / 900);
+  const head = Math.min(N - 1, t / BEAT), hi = Math.floor(head);
+  g.globalAlpha = 1; g.fillStyle = '#07080a'; g.fillRect(0, 0, W, H);
+  g.globalAlpha = Math.max(0, loopFade);
+  const TEAL = '95,212,196', AMBER = '231,166,74', PALE = '226,230,236';
+
+  // the window: five beats behind the remembers-five playhead
+  if (head >= 1) {
+    const lo = Math.max(0, head - WIN + 1), [ax, ay] = pos(lo, 1, sepAt(lo)), [bx, by] = pos(head, 1, sepAt(hi));
+    const pad = 14; g.strokeStyle = 'rgba(231,166,74,.22)'; g.fillStyle = 'rgba(231,166,74,.045)'; g.lineWidth = 1;
+    const x = Math.min(ax, bx) - pad, y = Math.min(ay, by) - pad, w = Math.abs(bx - ax) + pad * 2, h = Math.abs(by - ay) + pad * 2;
+    g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, 10) : g.rect(x, y, w, h); g.fill(); g.stroke();
+  }
+  // memories: remembers-all keeps every beat lit; remembers-five lets beats outside its window go to ember
+  const all = (i, u) => 0.92;
+  const five = (i, u) => { const age = u - i; return age < WIN ? 0.95 : Math.max(0.12, 0.95 - (age - WIN + 1) * 0.28); };
+  // before the split the two runs are one strand (identical lines): draw it once, pale
+  // the shared opening stays one pale strand; after it, each run is its own color
+  strand(A, 0, Math.min(head, SPLIT - 2), PALE, all);
+  if (head >= SPLIT - 1) {
+    const from = SPLIT - 2, cut = D => D.slice(from);
+    const shift = f => (i, u) => f(i + from, u + from);
+    const posBak = pos; let off = from;
+    pos = (i, lane, sep) => posBak(i + off, lane, sepAt(i + off));
+    strand(cut(A), -1, head - from, TEAL, shift(all)); strand(cut(B), 1, head - from, AMBER, shift(five));
+    pos = posBak;
+  }
+  // the first forgetting: at turn 7, the window lets go of turn 1
+  const forgetT = (head - (SPLIT - 1));
+  if (forgetT > -0.2 && forgetT < 1.6) {
+    const [x, y] = pos(0, 1, sepAt(0)), a = Math.max(0, 1 - Math.abs(forgetT - 0.3) / 1.3);
+    g.strokeStyle = `rgba(231,166,74,${0.5 * a})`; g.lineWidth = 1;
+    g.beginPath(); g.arc(x, y, 10 + forgetT * 26, 0, Math.PI * 2); g.stroke();
+    label('the window lets go of turn 1', ...pos(0, 1, 1), AMBER, 0.75 * a, portrait ? 1 : 1);
+  }
+  // invented people
+  for (const [k, name] of Object.entries(NAMES_A)) if (hi >= k - 1) label(name, ...pos(k - 1, -1, sepAt(k - 1)), TEAL, 0.6, -1);
+  for (const [k, name] of Object.entries(NAMES_B)) if (hi >= k - 1) label(name, ...pos(k - 1, 1, sepAt(k - 1)), AMBER, 0.6, 1);
+  // the one phrase they still share
+  if (hi >= SHARED.b - 1) {
+    const [x0, y0] = pos(SHARED.a - 1, -1, sepAt(SHARED.a - 1)), [x1, y1] = pos(SHARED.b - 1, 1, sepAt(SHARED.b - 1));
+    const a = ease((head - (SHARED.b - 1)) / 2);
+    const mx = (x0 + x1) / 2 + (portrait ? 0 : 0), my = (y0 + y1) / 2;
+    g.strokeStyle = `rgba(${PALE},${0.35 * a})`; g.lineWidth = 0.8; g.setLineDash([2, 4]);
+    g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo(mx + (portrait ? 0 : 0), my + (portrait ? -30 : -30), x1, y1); g.stroke(); g.setLineDash([]);
+    g.font = 'italic 11px Georgia, serif'; g.fillStyle = `rgba(${PALE},${0.6 * a})`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(SHARED.text, mx, my - (portrait ? 0 : 22) + (portrait ? -2 : 0));
+  }
+  // captions: latest line from each
+  const say = (D, i) => D[i][2] ? `${WHO[D[i][0]]}: ${D[i][2]}` : `${WHO[D[i][0]]}: (${D[i][1]} words)`;
+  document.getElementById('va').textContent = head < SPLIT - 1 ? say(A, hi) + '   (both runs, word for word)' : say(A, hi);
+  document.getElementById('vb').textContent = head < SPLIT - 1 ? '— same line —' : say(B, hi);
+  document.getElementById('cap').style.opacity = Math.max(0, loopFade);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
