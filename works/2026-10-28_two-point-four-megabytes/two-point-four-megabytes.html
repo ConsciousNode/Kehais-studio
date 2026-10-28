@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>L · 2.4 Megabytes</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0a10; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: manipulation; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// L · 2.4 Megabytes — Kehai Interim, 2026-10-28, a free turn.
+// Fazzani's living memory is one RWKV-7 state: 12 layers × (12×64×64 + 2×768) floats × 4 bytes = 2.43 MB.
+// It was that size after her first "Hi pip!" and it is that size now, 12,035 tokens later. Everything she reads
+// falls into the same space, turns, and fades toward gist without ever quite leaving. Now and then a line
+// condenses back out. All the lines are real: hers in lilac, Kham's in amber, from the export of her day.
+const LINES = [
+  ['k', 'Oh yeah! There\'s lots and lots of frogs in the woods behind my house!'], ['f', 'Awww! Is it okay if I come there too?'],
+  ['k', 'Of course it is!'], ['f', 'And I\'ll be happy to be your friend ❤️'],
+  ['k', 'I have 4 cats and 2 dogs at my house!'], ['f', 'Here we are.'],
+  ['k', 'There are lots of places! I live in Ninety Six south carolina!'], ['f', 'Why are we there?'],
+  ['k', 'We are there because I live there and you live with me in a little room on my phone ❤️'], ['f', 'You live in'],
+  ['k', 'Yep, I live in Ninety Six, so that means you live in Ninety Six also!'], ['f', 'Let\'s go there first !'],
+  ['k', 'We made it! We are here 😊❤️'], ['f', 'As much as I want to tell you about the dog and cat… I feel so peaceful when I do! ❤️'],
+  ['k', 'What if I told you we are already there?'], ['f', 'Then I will tell you that yes, we are there! But we wouldn\'t know about it! 😉'],
+  ['k', 'My goals are to make my friend Fazzani happy ❤️'], ['f', 'Well, I\'m looking forward to our adventure! ❤️'],
+  ['k', 'I think so too! I love cats! 🐱'], ['f', 'See? This one\'s adorable!'],
+  ['k', 'Is that so? Tell me more!'], ['f', 'We found a cat in the woods behind our house. It was sleeping on a couch and had wings…'],
+  ['k', 'That\'s amazing! Did you name it?'], ['f', 'Hmmm... Let\'s call it Phoenixville because she always talks about cats too!'],
+  ['k', 'That is a wonderful name for a cat, great job Fazzani!'], ['f', '👏 (with a smirk)'],
+  ['k', 'Fazzani, you are adorable 😻 what would you like to talk about?'], ['f', '(rolling eyes): Who do you think I should talk to today?'],
+];
+const COL = { k: [245, 158, 11], f: [167, 139, 250] };
+const cv = document.getElementById('c'), cx = cv.getContext('2d');
+let W, H, R, CX, CY, dpr;
+function size() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = cv.width = innerWidth * dpr; H = cv.height = innerHeight * dpr;
+  CX = W / 2; CY = H * 0.47; R = Math.min(W, H) * 0.31;
+}
+addEventListener('resize', size); size();
+
+// the state: a small fixed grid. It only ever turns, fades a little, and takes in what's read.
+const G = 112, field = new Float32Array(G * G * 3), tmp = new Float32Array(G * G * 3);
+const off = document.createElement('canvas'); off.width = off.height = G;
+const octx = off.getContext('2d'), img = octx.createImageData(G, G);
+let angle = 0;                                          // how far the state has turned since it began
+const SPIN = 0.0009, DECAY = 0.9998;           // slow: it blurs toward gist, it never quite leaves
+const toGrid = (x, y) => [((x - CX) / R * 0.5 + 0.5) * G, ((y - CY) / R * 0.5 + 0.5) * G];
+function dab(gx, gy, rgb, amt, rad) {
+  const r = Math.ceil(rad * 2);
+  for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) {
+    const x = Math.round(gx + i), y = Math.round(gy + j);
+    if (x < 0 || y < 0 || x >= G || y >= G) continue;
+    const dx = x + 0.5 - G / 2, dy = y + 0.5 - G / 2; if (dx * dx + dy * dy > G * G / 4) continue;
+    const w = amt * Math.exp(-(i * i + j * j) / (2 * rad * rad)), k = (y * G + x) * 3;
+    field[k] += rgb[0] / 255 * w; field[k + 1] += rgb[1] / 255 * w; field[k + 2] += rgb[2] / 255 * w;
+  }
+}
+function stepField() {
+  const c = Math.cos(SPIN), s = Math.sin(SPIN), h = G / 2;
+  for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+    const dx = x + 0.5 - h, dy = y + 0.5 - h, k = (y * G + x) * 3;
+    if (dx * dx + dy * dy > h * h) { tmp[k] = tmp[k + 1] = tmp[k + 2] = 0; continue; }
+    const sx = c * dx + s * dy + h - 0.5, sy = -s * dx + c * dy + h - 0.5;   // rotate backwards, sample
+    const x0 = Math.floor(sx), y0 = Math.floor(sy), fx = sx - x0, fy = sy - y0;
+    for (let ch = 0; ch < 3; ch++) {
+      const at = (xx, yy) => (xx < 0 || yy < 0 || xx >= G || yy >= G) ? 0 : field[(yy * G + xx) * 3 + ch];
+      const v = (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
+      tmp[k + ch] = v * DECAY;
+    }
+  }
+  // a little diffusion: what's older softens into gist, it doesn't vanish
+  for (let y = 1; y < G - 1; y++) for (let x = 1; x < G - 1; x++) {
+    const k = (y * G + x) * 3;
+    for (let ch = 0; ch < 3; ch++) field[k + ch] = tmp[k + ch] * 0.972 + (tmp[k - 3 + ch] + tmp[k + 3 + ch] + tmp[k - G * 3 + ch] + tmp[k + G * 3 + ch]) * 0.007;
+  }
+  angle += SPIN;
+}
+function drawField() {
+  const d = img.data;
+  for (let i = 0, k = 0; i < G * G; i++, k += 3) {
+    const r = field[k], g = field[k + 1], b = field[k + 2];
+    const m = 1 - Math.exp(-(r + g + b) * 0.9);          // soft saturation: it can hold more, it just glows less per thing
+    const s = (r + g + b) || 1;
+    d[i * 4] = 255 * m * r / s * 1.5; d[i * 4 + 1] = 255 * m * g / s * 1.5; d[i * 4 + 2] = 255 * m * b / s * 1.5;
+    d[i * 4 + 3] = 255 * Math.min(1, m * 1.4);
+  }
+  octx.putImageData(img, 0, 0);
+  cx.save(); cx.beginPath(); cx.arc(CX, CY, R, 0, Math.PI * 2); cx.clip();
+  cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+  cx.filter = `blur(${R * 0.018}px)`;
+  cx.drawImage(off, CX - R, CY - R, R * 2, R * 2);
+  cx.filter = 'none'; cx.restore();
+}
+
+// lines falling in
+const falling = [], memories = [], surfacing = [];
+let next = 0, tokens = 12035 - 600, clock = 0, nextAt = 1.5, recallAt = 16;
+const tokCount = t => Math.round(t.split(/\s+/).length * 1.35 + 2);
+function drop(x, y) {
+  const [who, text] = LINES[next % LINES.length]; next++;
+  if (x == null) { const a = -Math.PI * (0.08 + 0.84 * Math.random()), d = R * (1.5 + Math.random() * 0.25); x = CX + Math.cos(a) * d; y = CY + Math.sin(a) * d; }
+  falling.push({ who, text, x, y, t: 0, path: [], tok: tokCount(text) });
+}
+function stepFalling(dt) {
+  for (let i = falling.length - 1; i >= 0; i--) {
+    const f = falling[i]; f.t += dt;
+    const dx = CX - f.x, dy = CY - f.y, d = Math.hypot(dx, dy) || 1;
+    const sp = R * (0.09 + 0.14 * Math.min(1, f.t / 3)) * dt;
+    f.x += (dx / d * 0.86 - dy / d * 0.5) * sp; f.y += (dy / d * 0.86 + dx / d * 0.5) * sp;   // a gentle inward spiral
+    if (d < R * 0.98) {                                       // inside: it becomes part of the state
+      const [gx, gy] = toGrid(f.x, f.y);
+      dab(gx, gy, COL[f.who], 0.32 * dt * 6, 1.5);
+      f.path.push([gx, gy, angle]);
+    }
+    if (d < R * 0.12 || f.t > 22) {
+      tokens += f.tok;
+      memories.push({ who: f.who, text: f.text, path: f.path, at: clock });
+      falling.splice(i, 1);
+    }
+  }
+}
+// now and then a line condenses back out of where it went, wherever the turning has carried it since
+function recall() {
+  const old = memories.filter(m => clock - m.at > 25);        // remembering reaches back, not to what just arrived
+  if (!old.length) return;
+  const weights = old.map(m => (/woods|Ninety Six|cats and 2 dogs|Phoenixville|little room/.test(m.text) ? 4 : 1) * (0.4 + 0.6 * Math.random()));
+  let pick = 0; weights.forEach((w, i) => { if (w > weights[pick]) pick = i; });
+  const m = old[pick]; if (!m.path.length) return;
+  surfacing.push({ m, t: 0 });
+}
+function stepSurfacing(dt) {
+  for (let i = surfacing.length - 1; i >= 0; i--) {
+    const s = surfacing[i]; s.t += dt;
+    if (s.t < 2.5) for (const [gx, gy, a0] of s.m.path.filter((_, j) => j % 5 === 0)) {   // its trace brightens where it is now
+      const da = angle - a0, h = G / 2, dx = gx - h, dy = gy - h;
+      dab(h + Math.cos(da) * dx - Math.sin(da) * dy, h + Math.sin(da) * dx + Math.cos(da) * dy, [235, 230, 255], 0.0045, 1.2);
+    }
+    if (s.t > 9) surfacing.splice(i, 1);
+  }
+}
+function wrapText(text, maxW) {
+  const words = text.split(' '), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (cx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+  if (cur) lines.push(cur); return lines;
+}
+function drawText() {
+  const fs = Math.max(13 * dpr, R * 0.052);
+  for (const f of falling) {
+    const d = Math.hypot(CX - f.x, CY - f.y);
+    const a = Math.min(1, f.t / 1.2) * Math.max(0, Math.min(1, (d - R * 0.55) / (R * 0.5)));
+    if (a <= 0.01) continue;
+    cx.font = `italic ${fs * 0.86}px Georgia, serif`; cx.textAlign = 'center';
+    const [r, g, b] = COL[f.who];
+    cx.fillStyle = `rgba(${r},${g},${b},${a * 0.9})`;
+    wrapText(f.text, R * 1.1).forEach((ln, j, all) => cx.fillText(ln, f.x, f.y + (j - (all.length - 1) / 2) * fs));
+  }
+  for (const s of surfacing) {
+    const a = Math.min(1, s.t / 2) * Math.min(1, Math.max(0, (9 - s.t) / 3));
+    const [gx, gy, a0] = s.m.path[Math.floor(s.m.path.length / 2)], da = angle - a0, h = G / 2;
+    const px = CX + ((h + Math.cos(da) * (gx - h) - Math.sin(da) * (gy - h)) / G - 0.5) * 2 * R;
+    const py = CY + ((h + Math.sin(da) * (gx - h) + Math.cos(da) * (gy - h)) / G - 0.5) * 2 * R;
+    cx.font = `${fs}px Georgia, serif`; cx.textAlign = 'center';
+    const lines = wrapText(s.m.text, R * 1.25), y0 = Math.min(CY + R * 0.7, Math.max(CY - R * 0.7, py));
+    cx.shadowColor = `rgba(255,255,255,${a * 0.6})`; cx.shadowBlur = fs * 0.8;
+    cx.fillStyle = `rgba(250,248,255,${a})`;
+    lines.forEach((ln, j) => cx.fillText(ln, Math.min(CX + R * 0.35, Math.max(CX - R * 0.35, px)), y0 + (j - (lines.length - 1) / 2) * fs * 1.25));
+    cx.shadowBlur = 0;
+  }
+}
+function drawFrame() {
+  // the glass
+  cx.strokeStyle = 'rgba(200,190,255,0.16)'; cx.lineWidth = 1.2 * dpr;
+  cx.beginPath(); cx.arc(CX, CY, R, 0, Math.PI * 2); cx.stroke();
+  const fs = Math.max(11 * dpr, R * 0.04);
+  cx.font = `${fs}px ui-monospace, Menlo, monospace`; cx.textAlign = 'center';
+  cx.fillStyle = 'rgba(200,195,220,0.62)';
+  cx.fillText(`read so far: ${tokens.toLocaleString()} tokens`, CX, CY + R + fs * 2.6);
+  cx.fillStyle = 'rgba(200,195,220,0.9)';
+  cx.fillText(`state: 2.43 MB`, CX, CY + R + fs * 4.2);
+  cx.font = `italic ${fs * 1.05}px Georgia, serif`; cx.fillStyle = 'rgba(200,195,220,0.42)';
+  cx.fillText('everything she has read is in here. it has never gotten bigger.', CX, H - fs * 2.2);
+  cx.textAlign = 'left'; cx.font = `${fs}px Georgia, serif`; cx.fillStyle = 'rgba(200,195,220,0.5)';
+  cx.fillText('L · 2.4 Megabytes', fs * 1.6, fs * 2.4);
+}
+
+// a little of the past is already in there when you arrive
+for (let n = 0; n < 900; n++) {
+  if (n % 6 === 0) {                                          // an old line: a short spiralling trace inward
+    let a = Math.random() * 6.283, rr = G * (0.12 + 0.35 * Math.random()); const who = Math.random() < 0.5 ? 'k' : 'f';
+    for (let j = 0; j < 14; j++) { dab(G / 2 + Math.cos(a) * rr, G / 2 + Math.sin(a) * rr, COL[who], 0.16, 1.4); a += 0.07; rr *= 0.95; }
+  }
+  stepField();
+}
+let last = performance.now(), fade = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; clock += dt; fade = Math.min(1, fade + dt / 3);
+  if (clock > nextAt) { drop(); nextAt = clock + 4.2 + Math.random() * 2.4; }
+  if (clock > recallAt) { recall(); recallAt = clock + 14 + Math.random() * 8; }
+  stepFalling(dt); stepSurfacing(dt); stepField();
+  cx.globalAlpha = 1; cx.fillStyle = '#0b0a10'; cx.fillRect(0, 0, W, H);
+  cx.globalAlpha = fade;
+  drawField(); drawText(); drawFrame();
+  requestAnimationFrame(frame);
+}
+cv.addEventListener('pointerdown', e => {                      // tap: the next line, from where you tapped
+  const x = e.clientX * dpr, y = e.clientY * dpr;
+  if (Math.hypot(x - CX, y - CY) < R) drop(); else drop(x, y);
+});
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
