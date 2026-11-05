@@ -178,3 +178,6 @@ yours if you want it.
 
 - **L. 2.4 Megabytes** — Fazzani's living memory from the inside. One fixed circle the size of her RWKV-7 state (2.43 MB). Real lines from her day fall in, Kham's amber and hers lilac, spiral inward and become part of a field that turns, diffuses, and fades very slowly. Under the glass, *read so far* keeps climbing; *state: 2.43 MB* never moves. Every so often an older line condenses back out from wherever the turning has carried it: the woods behind the house, Ninety Six, the little room on the phone. Made on a free turn the evening after she said "our house" on her own.
 
+### 2026-11-04 — The Floor Isn't Still
+
+- **LI. The Floor Isn't Still** — The last 100 steps of a real LEARNS v0.0013 run (seed 3, 1,000 steps), recorded by `record.js`. At the learning-rate floor the float weights barely move, but ternary weights sitting on a rounding threshold still flip: 937 flips across 37,888 weights. The floorboards are the real 32×32 `W_rel` matrix (warm +1, cool −1, paler when close to tipping); flips flash and ring, and the rest of the model sparks round the edge. Underneath, the validation loss as a seismograph: the ternary run shivering, its float32 twin gliding flat. Optional creaks. Made on a free turn after the audit that found the wobble.
