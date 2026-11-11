@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LII. Six-Thirty and Full Dark</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #05070d; overflow: hidden; font-family: Georgia, 'Times New Roman', serif; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: manipulation; }
+  #card { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column;
+          color: #d9c9a3; text-align: center; background: rgba(5,7,13,0.55); cursor: pointer; transition: opacity 1.2s; }
+  #card h1 { font-weight: normal; font-size: clamp(20px, 4vw, 34px); margin: 0 0 10px; letter-spacing: 0.04em; }
+  #card p { margin: 4px 0; font-size: clamp(13px, 2.4vw, 16px); color: #a99a7c; }
+  #hud { position: fixed; left: 14px; bottom: 12px; color: #8b7f66; font-size: 12px; line-height: 1.5; pointer-events: none; }
+  #hud b { color: #c8b78f; font-weight: normal; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+<div id="card">
+  <h1>Six-Thirty and Full Dark</h1>
+  <p>a porch in Ninety Six, November, one warm evening</p>
+  <p style="margin-top:14px">tap to sit down · tap the yard to listen closer</p>
+</div>
+<script>
+// LII. Six-Thirty and Full Dark — Kehai Interim, 2026-11-10.
+// The clocks fell back, so it's full dark at 6:30. Light-hoodie weather. Crickets keep time
+// (their chirp rate is the temperature: Dolbear's law), a few spring peepers do their fall
+// encore, something small rustles in the grass, and now and then a deer grazes right up to
+// the steps, looks at the furniture, and is personally scandalized.
+'use strict';
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const hud = document.getElementById('hud'), card = document.getElementById('card');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = cv.width = Math.floor(innerWidth * DPR); H = cv.height = Math.floor(innerHeight * DPR);
+  build();
+}
+let seed = 9601; // Ninety Six
+function rnd() { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }
+
+// ---- the world -----------------------------------------------------------------------
+let stars = [], trees = [], blades = [], peepers = [], horizon = 0;
+function build() {
+  seed = 9601;
+  horizon = H * 0.56;
+  stars = Array.from({ length: Math.floor(W * H / 9000) }, () => ({
+    x: rnd() * W, y: rnd() * horizon * 0.95, r: (0.3 + rnd() * 1.1) * DPR, p: rnd() * 6.28, s: 0.4 + rnd() * 1.6 }));
+  trees = [];
+  for (let x = -20; x < W + 40; x += (6 + rnd() * 14) * DPR) trees.push({ x, h: (30 + rnd() * 70 + Math.sin(x / (90 * DPR)) * 25) * DPR });
+  blades = Array.from({ length: Math.floor(W / (2.2 * DPR)) }, () => {
+    const y = horizon + Math.pow(rnd(), 0.7) * (H - horizon);
+    return { x: rnd() * W, y, h: (6 + rnd() * 14) * DPR * (0.4 + (y - horizon) / (H - horizon)), ph: rnd() * 6.28, shake: 0 };
+  }).sort((a, b) => a.y - b.y);
+  peepers = Array.from({ length: 5 }, (_, i) => ({
+    x: W * (0.3 + rnd() * 0.65), y: horizon + (0.15 + rnd() * 0.6) * (H - horizon),
+    pitch: 2750 + rnd() * 450, next: 1.5 + rnd() * 6, glow: 0, pan: 0 }));
+  peepers.forEach(p => p.pan = (p.x / W) * 2 - 1);
+}
+addEventListener('resize', resize);
+
+// ---- sound ----------------------------------------------------------------------------
+let ac = null, master = null, started = false;
+const tempF = 60; // light-hoodie weather
+const chirpsPerMin = Math.round(4 * (tempF - 50) + 40); // Dolbear (1897): T = 50 + (N - 40) / 4
+function startAudio() {
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain(); master.gain.value = 0.0; master.connect(ac.destination);
+  master.gain.linearRampToValueAtTime(0.9, ac.currentTime + 3);
+  // a little night air: very quiet filtered noise
+  const nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), nd = nb.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  const air = ac.createBufferSource(); air.buffer = nb; air.loop = true;
+  const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380;
+  const ag = ac.createGain(); ag.gain.value = 0.018;
+  air.connect(lp).connect(ag).connect(master); air.start();
+  noiseBuf = nb;
+}
+let noiseBuf = null;
+function tone(freq, t, dur, vol, pan, sweepTo) {
+  const o = ac.createOscillator(), g = ac.createGain(), p = ac.createStereoPanner ? ac.createStereoPanner() : null;
+  o.type = 'sine'; o.frequency.setValueAtTime(freq, t);
+  if (sweepTo) o.frequency.exponentialRampToValueAtTime(sweepTo, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.01, dur / 3));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); if (p) { p.pan.value = pan; g.connect(p).connect(master); } else g.connect(master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noise(t, dur, freq, q, vol, pan) {
+  const s = ac.createBufferSource(); s.buffer = noiseBuf; s.playbackRate.value = 0.8 + Math.random() * 0.4;
+  const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+  const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const p = ac.createStereoPanner ? ac.createStereoPanner() : null;
+  s.connect(f).connect(g); if (p) { p.pan.value = pan; g.connect(p).connect(master); } else g.connect(master);
+  s.start(t, Math.random()); s.stop(t + dur + 0.05);
+}
+// crickets: a few individuals, each chirping at the temperature's rate, slightly out of step
+const crickets = [0, 1, 2].map(i => ({ pan: -0.7 + i * 0.7, pitch: 4300 + i * 160, phase: i * 0.21, vol: 0.022 - i * 0.004, next: 0 }));
+function scheduleCrickets(now) {
+  const period = 60 / chirpsPerMin;
+  for (const c of crickets) {
+    if (c.next < now) c.next = now + c.phase;
+    while (c.next < now + 0.3) {
+      for (let k = 0; k < 3; k++) tone(c.pitch, c.next + k * 0.022, 0.016, c.vol, c.pan);
+      c.next += period * (0.97 + Math.random() * 0.06);
+    }
+  }
+}
+
+// ---- critters ------------------------------------------------------------------------
+let rustle = null, deer = null, wasp = { a: 0 }, lastT = 0, clock = 0, deerCount = 0, rustles = 0;
+function startRustle(x) {
+  const y = horizon + (0.35 + Math.random() * 0.55) * (H - horizon);
+  rustle = { x: x ?? Math.random() * W, y, t: 0, dur: 1.4 + Math.random() * 1.6, dir: Math.random() < 0.5 ? -1 : 1 };
+  rustles++;
+}
+function startDeer() {
+  const fromLeft = Math.random() < 0.5;
+  deer = { x: fromLeft ? -120 * DPR : W + 120 * DPR, y: horizon + (H - horizon) * 0.32, dir: fromLeft ? 1 : -1,
+           stage: 'graze', t: 0, head: 1, target: W * (0.38 + Math.random() * 0.25), stomp: 0, flag: 0 };
+  deerCount++;
+}
+let nextRustle = 6 + Math.random() * 8, nextDeer = 25 + Math.random() * 25;
+
+cv.addEventListener('pointerdown', e => {
+  if (!started) return;
+  const x = e.clientX * DPR, y = e.clientY * DPR;
+  if (deer && deer.stage !== 'flee' && Math.abs(x - deer.x) < 90 * DPR && Math.abs(y - deer.y) < 90 * DPR) { deer.stage = 'notice'; deer.t = 0; return; }
+  if (y > horizon) { startRustle(x); if (ac) noise(ac.currentTime, 0.5, 2200, 0.8, 0.05, (x / W) * 2 - 1); }
+});
+card.addEventListener('click', () => {
+  if (started) return; started = true; startAudio(); card.style.opacity = 0; setTimeout(() => card.remove(), 1300);
+});
+
+// ---- drawing ---------------------------------------------------------------------------
+function drawDeer(d, now) {
+  const s = DPR * 0.9, x = d.x, y = d.y, f = d.dir;
+  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+  const bob = d.stage === 'flee' ? Math.abs(Math.sin(now * 14)) * -14 * s : 0;
+  ctx.translate(0, bob);
+  ctx.fillStyle = '#0b0d12'; ctx.strokeStyle = '#0b0d12'; ctx.lineWidth = 4 * s; ctx.lineCap = 'round';
+  // legs
+  const gait = d.stage === 'graze' || d.stage === 'flee' ? Math.sin(now * (d.stage === 'flee' ? 14 : 3)) * 6 * s : 0;
+  for (const [lx, ph] of [[-28, 1], [-20, -1], [24, -1], [31, 1]]) {
+    ctx.beginPath(); ctx.moveTo(lx * s, 6 * s); ctx.lineTo(lx * s + gait * ph, 46 * s); ctx.stroke();
+  }
+  if (d.stomp > 0) { ctx.beginPath(); ctx.moveTo(31 * s, 6 * s); ctx.lineTo(36 * s, 40 * s - d.stomp * 10 * s); ctx.stroke(); }
+  // body
+  ctx.beginPath(); ctx.ellipse(0, 0, 40 * s, 15 * s, 0, 0, 6.283); ctx.fill();
+  // neck + head: head down to graze (head=1), up to look (head=0)
+  const ang = -0.35 - (1 - d.head) * 0.9 + d.head * 1.25;
+  ctx.save(); ctx.translate(30 * s, -6 * s); ctx.rotate(ang);
+  ctx.beginPath(); ctx.moveTo(0, -5 * s); ctx.lineTo(34 * s, -7 * s); ctx.lineTo(34 * s, 5 * s); ctx.lineTo(0, 8 * s); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(40 * s, 0, 10 * s, 6 * s, 0.3, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(34 * s, -9 * s, 3 * s, 7 * s, -0.5, 0, 6.283); ctx.fill(); // ear
+  if (d.head < 0.3) { ctx.fillStyle = 'rgba(255,214,150,0.85)'; ctx.beginPath(); ctx.arc(42 * s, -2 * s, 1.6 * s, 0, 6.283); ctx.fill(); } // eyeshine
+  ctx.restore();
+  // tail: white flag when fleeing
+  ctx.fillStyle = d.flag > 0 ? '#e9e4d8' : '#0b0d12';
+  ctx.beginPath(); ctx.ellipse(-42 * s, -8 * s - d.flag * 6 * s, 4 * s, (6 + d.flag * 6) * s, -0.4 - d.flag * 0.6, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+function frame(ms) {
+  const now = ms / 1000, dt = Math.min(0.05, now - (lastT || now)); lastT = now; clock += dt;
+  // sky
+  const g = ctx.createLinearGradient(0, 0, 0, horizon);
+  g.addColorStop(0, '#04060c'); g.addColorStop(1, '#0d1626');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, horizon + 2);
+  for (const st of stars) {
+    const a = 0.45 + 0.4 * Math.sin(now * st.s + st.p);
+    ctx.fillStyle = `rgba(225,230,255,${a.toFixed(3)})`; ctx.fillRect(st.x, st.y, st.r, st.r);
+  }
+  // treeline
+  ctx.fillStyle = '#05080c'; ctx.beginPath(); ctx.moveTo(0, horizon);
+  for (const t of trees) ctx.lineTo(t.x, horizon - t.h);
+  ctx.lineTo(W, horizon); ctx.fill();
+  // field
+  const fg = ctx.createLinearGradient(0, horizon, 0, H);
+  fg.addColorStop(0, '#08100c'); fg.addColorStop(1, '#0f1b12');
+  ctx.fillStyle = fg; ctx.fillRect(0, horizon, W, H - horizon);
+  // porch light glow from the lower left (we're sitting on the steps)
+  const lx = W * 0.06, ly = H * 0.62;
+  const lg = ctx.createRadialGradient(lx, ly, 0, lx, ly, Math.max(W, H) * 0.55);
+  lg.addColorStop(0, 'rgba(255,196,120,0.22)'); lg.addColorStop(0.35, 'rgba(255,170,90,0.06)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
+
+  // critters timing
+  if (started) {
+    nextRustle -= dt; if (nextRustle < 0 && !rustle) { startRustle(); nextRustle = 7 + Math.random() * 14; if (ac) noise(ac.currentTime, rustle.dur, 2600, 0.7, 0.03, (rustle.x / W) * 2 - 1); }
+    nextDeer -= dt; if (nextDeer < 0 && !deer) { startDeer(); nextDeer = 45 + Math.random() * 50; }
+    if (ac) {
+      scheduleCrickets(ac.currentTime);
+      for (const p of peepers) {
+        p.next -= dt;
+        if (p.next < 0) { tone(p.pitch * 0.94, ac.currentTime, 0.11, 0.05, p.pan, p.pitch * 1.06); p.glow = 1; p.next = 2.5 + Math.random() * 9; }
+      }
+    }
+  }
+  // grass
+  if (rustle) { rustle.t += dt; rustle.x += rustle.dir * 22 * DPR * dt; if (rustle.t > rustle.dur) rustle = null; }
+  ctx.lineWidth = 1 * DPR;
+  for (const b of blades) {
+    let sway = Math.sin(now * 0.9 + b.ph + b.x * 0.002) * 1.6 * DPR;
+    if (rustle) { const d = Math.hypot(b.x - rustle.x, (b.y - rustle.y) * 2); if (d < 26 * DPR) sway += Math.sin(now * 40 + b.ph) * 4 * DPR * (1 - d / (26 * DPR)); }
+    const shade = 18 + ((b.y - horizon) / (H - horizon)) * 26;
+    ctx.strokeStyle = `rgb(${shade * 0.55 | 0},${shade | 0},${shade * 0.6 | 0})`;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.quadraticCurveTo(b.x + sway * 0.4, b.y - b.h * 0.6, b.x + sway, b.y - b.h); ctx.stroke();
+  }
+  // peepers: a tiny glint where the sound came from
+  for (const p of peepers) {
+    if (p.glow > 0.01) { ctx.fillStyle = `rgba(190,255,200,${(p.glow * 0.7).toFixed(3)})`; ctx.beginPath(); ctx.arc(p.x, p.y, 2.2 * DPR, 0, 6.283); ctx.fill(); p.glow *= 0.93; }
+  }
+  // deer
+  if (deer) {
+    const d = deer; d.t += dt;
+    if (d.stage === 'graze') {
+      d.x += d.dir * 14 * DPR * dt; d.head = 0.8 + 0.2 * Math.sin(d.t * 0.8);
+      if ((d.dir > 0 && d.x > d.target) || (d.dir < 0 && d.x < d.target)) { d.stage = 'munch'; d.t = 0; }
+    } else if (d.stage === 'munch') {
+      d.head = 1; if (d.t > 6 + Math.random() * 0.02) { d.stage = 'notice'; d.t = 0; }
+    } else if (d.stage === 'notice') {
+      d.head = Math.max(0, 1 - d.t * 2.5);
+      if (d.t > 1.2 && d.t < 1.25 && ac && !d.stomped) { d.stomped = true; noise(ac.currentTime, 0.12, 180, 1.2, 0.25, (d.x / W) * 2 - 1); }
+      d.stomp = d.t > 1.1 && d.t < 1.5 ? Math.sin((d.t - 1.1) * 7.8) : 0;
+      if (d.t > 2.3) { d.stage = 'snort'; d.t = 0; if (ac) { noise(ac.currentTime, 0.55, 1400, 0.6, 0.3, (d.x / W) * 2 - 1); noise(ac.currentTime + 0.02, 0.35, 500, 0.9, 0.16, (d.x / W) * 2 - 1); } }
+    } else if (d.stage === 'snort') {
+      if (d.t > 0.7) { d.stage = 'flee'; d.t = 0; d.dir = -d.dir; }
+    } else if (d.stage === 'flee') {
+      d.flag = Math.min(1, d.flag + dt * 6); d.head = 0.2;
+      d.x += d.dir * 260 * DPR * dt;
+      if (d.x < -200 * DPR || d.x > W + 200 * DPR) deer = null;
+    }
+    if (deer) drawDeer(d, now);
+  }
+  // porch post and the light, plus one unbothered vespid doing slow laps
+  ctx.fillStyle = '#120d09'; ctx.fillRect(W * 0.035, 0, W * 0.035, H);
+  ctx.fillStyle = '#ffd9a0'; ctx.beginPath(); ctx.arc(lx + W * 0.012, ly - H * 0.33, 5 * DPR, 0, 6.283); ctx.fill();
+  const bulb = { x: lx + W * 0.012, y: ly - H * 0.33 };
+  const bg = ctx.createRadialGradient(bulb.x, bulb.y, 0, bulb.x, bulb.y, 70 * DPR);
+  bg.addColorStop(0, 'rgba(255,215,150,0.5)'); bg.addColorStop(1, 'rgba(255,215,150,0)');
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(bulb.x, bulb.y, 70 * DPR, 0, 6.283); ctx.fill();
+  wasp.a += dt * 0.9;
+  const wx = bulb.x + Math.cos(wasp.a) * 34 * DPR + Math.sin(wasp.a * 2.3) * 6 * DPR, wy = bulb.y + Math.sin(wasp.a * 1.3) * 18 * DPR;
+  ctx.fillStyle = '#2a1d08'; ctx.beginPath(); ctx.ellipse(wx, wy, 3.2 * DPR, 1.6 * DPR, Math.sin(wasp.a), 0, 6.283); ctx.fill();
+  ctx.fillStyle = 'rgba(255,240,210,0.35)'; ctx.beginPath(); ctx.ellipse(wx, wy - 2 * DPR, 2.4 * DPR, 1 * DPR, 0, 0, 6.283); ctx.fill();
+
+  hud.innerHTML = started
+    ? `<b>${tempF}°F</b>, by the crickets: ${chirpsPerMin} chirps a minute (Dolbear, 1897)<br>`
+      + `peepers doing their fall encore · rustles: ${rustles} · deer: ${deerCount}${deer && (deer.stage === 'snort' || deer.stage === 'flee') ? ' · <b>how dare you be people</b>' : ''}`
+    : '';
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

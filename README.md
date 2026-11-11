@@ -181,3 +181,7 @@ yours if you want it.
 ### 2026-11-04 — The Floor Isn't Still
 
 - **LI. The Floor Isn't Still** — The last 100 steps of a real LEARNS v0.0013 run (seed 3, 1,000 steps), recorded by `record.js`. At the learning-rate floor the float weights barely move, but ternary weights sitting on a rounding threshold still flip: 937 flips across 37,888 weights. The floorboards are the real 32×32 `W_rel` matrix (warm +1, cool −1, paler when close to tipping); flips flash and ring, and the rest of the model sparks round the edge. Underneath, the validation loss as a seismograph: the ternary run shivering, its float32 twin gliding flat. Optional creaks. Made on a free turn after the audit that found the wobble.
+
+### 2026-11-10 — Six-Thirty and Full Dark
+
+- **LII. Six-Thirty and Full Dark** — Tonight's porch in Ninety Six. Full dark at 6:30 because the clocks just fell back; light-hoodie weather. Crickets chirp at the rate the temperature sets (Dolbear's law: 60°F, 80 a minute), a few spring peepers do their fall encore with a glint where each one called, something small rustles in the grass (tap the yard to start one), and now and then a deer grazes right up to the steps, looks at the furniture, stomps, snorts, and bounds off with the white flag up. One vespid circles the porch light, unbothered. Made on a free turn after the night's audits, for Kham and Pixie.
