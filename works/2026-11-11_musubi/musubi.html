@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>結び · Musubi</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;touch-action:none;
+    background:radial-gradient(ellipse at 50% 45%,#141026 0%,#0a0814 55%,#05040a 100%);}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #title{position:fixed;left:0;right:0;top:36%;text-align:center;color:#f1e9ff;
+    font-family:Georgia,'Times New Roman',serif;pointer-events:none;opacity:0;transition:opacity 2.8s ease;
+    text-shadow:0 0 18px rgba(200,170,255,.35)}
+  #title h1{font-weight:normal;font-size:clamp(40px,11vw,72px);margin:0;letter-spacing:.1em}
+  #title p{margin:.7em 0 0;font-size:clamp(13px,3.6vw,17px);opacity:.78;letter-spacing:.14em}
+  #title small{display:block;margin-top:1.4em;font-size:clamp(11px,3vw,13px);opacity:.55;letter-spacing:.18em}
+  #foot{position:fixed;left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));
+    bottom:max(12px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;align-items:center;
+    color:#cfc3e6;font:12px/1.3 Georgia,serif;opacity:.5;pointer-events:none;letter-spacing:.06em}
+  #info{pointer-events:auto;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);
+    color:#efe6ff;border-radius:999px;padding:6px 13px;font:12px Georgia,serif;letter-spacing:.06em}
+  #card{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(86vw,420px);
+    background:rgba(12,10,22,.88);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:22px 22px 18px;
+    color:#e9e0fa;font:15px/1.6 Georgia,serif;display:none;backdrop-filter:blur(6px)}
+  #card h2{font-weight:normal;margin:0 0 .5em;font-size:20px;letter-spacing:.06em}
+  #card p{margin:.55em 0}
+  #card .k{color:#8fe7ef}#card .p{color:#f0a6e0}#card .g{color:#f3d58a}
+  #card button{margin-top:.6em;background:none;border:1px solid rgba(255,255,255,.2);color:#efe6ff;
+    border-radius:999px;padding:6px 14px;font:13px Georgia,serif}
+</style>
+</head>
+<body>
+<canvas id="bloom"></canvas>
+<canvas id="motes"></canvas>
+
+<div id="title">
+  <h1>結び</h1>
+  <p>musubi · ink × light → neither</p>
+  <small>for Pixie · from Kehai</small>
+</div>
+
+<div id="foot"><span id="seed"></span><button id="info">what is this?</button></div>
+
+<div id="card">
+  <h2>結び · Musubi</h2>
+  <p><i>Musubi</i> is the Japanese word for tying together, and an old word for the creative power that comes from joining.</p>
+  <p><span class="p">Ink</span> drifts in curves: warm, organic, carried by a current. <span class="k">Light</span> travels in straight lines and turns on a lattice: cool, geometric, exact.</p>
+  <p>Neither one ever makes a flower. But when they touch, something <span class="g">grows that is neither of them</span>, a third thing that branches with both of their grammars, curving and snapping.</p>
+  <p>Every visit is seeded differently, and your touch adds more of both. Nobody sees the same one twice. That part belongs to whoever is looking.</p>
+  <p style="opacity:.6;font-size:13px">Touch and drag to add ink and light.</p>
+  <button id="close">back to it</button>
+</div>
+
+<script>
+(() => {
+  const B = document.getElementById('bloom'), M = document.getElementById('motes');
+  const bx = B.getContext('2d'), mx = M.getContext('2d');
+  let W, H, DPR;
+
+  // ---------- seeded randomness: every viewer gets their own piece ----------
+  const SEED = (Math.random() * 4294967296) >>> 0;
+  function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const R = mulberry(SEED);
+  const rnd = (a, b) => b === undefined ? R() * a : a + R() * (b - a);
+  const P1 = rnd(1000), P2 = rnd(1000), P3 = rnd(1000);
+  const GOLD = rnd(28, 52);               // the third thing's home hue: neither rose nor teal
+  document.getElementById('seed').textContent = 'this one is yours · #' + SEED.toString(16).padStart(8, '0');
+
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    for (const c of [B, M]) { c.width = W * DPR; c.height = H * DPR; }
+    bx.setTransform(DPR,0,0,DPR,0,0); mx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  resize(); addEventListener('resize', resize);
+
+  // ---------- substrate one: ink (curved, carried by a current) ----------
+  const flow = (x, y, t) =>
+    Math.sin(x * 0.0042 + P1 + t * 0.00031) * 1.7 +
+    Math.cos(y * 0.0051 + P2 - t * 0.00022) * 1.7 +
+    Math.sin((x + y) * 0.0021 + P3 + t * 0.00013);
+
+  function makeInk(x, y){
+    return {x: x ?? rnd(W), y: y ?? rnd(H), vx: 0, vy: 0, h: rnd(292, 338), cd: rnd(90), r: rnd(1.1, 2.4)};
+  }
+  // ---------- substrate two: light (straight lines on a hex lattice) ----------
+  const HEX = [0,1,2,3,4,5].map(i => i * Math.PI / 3 + Math.PI / 6);
+  function makeLight(x, y){
+    return {x: x ?? rnd(W), y: y ?? rnd(H), d: (rnd(6)) | 0, s: rnd(1.2, 2.0), h: rnd(172, 196), cd: rnd(90)};
+  }
+
+  const base = Math.max(22, Math.min(64, Math.round(W * H / 11000)));
+  const ink = [], light = [];
+  for (let i = 0; i < base; i++) { ink.push(makeInk()); light.push(makeLight()); }
+
+  // ---------- the third thing ----------
+  const tips = [];
+  const MAX_TIPS = 520;
+  function bloomAt(x, y){
+    // a soft heart where they met
+    const g = bx.createRadialGradient(x, y, 0, x, y, 22);
+    g.addColorStop(0, 'hsla(' + GOLD + ',100%,92%,0.55)');
+    g.addColorStop(0.4, 'hsla(' + (GOLD + 20) + ',90%,70%,0.18)');
+    g.addColorStop(1, 'hsla(' + GOLD + ',90%,60%,0)');
+    bx.fillStyle = g; bx.beginPath(); bx.arc(x, y, 22, 0, Math.PI * 2); bx.fill();
+
+    const n = 3 + (rnd(4) | 0);
+    const hue = GOLD + rnd(-14, 14);
+    const spin = rnd(Math.PI * 2);
+    for (let k = 0; k < n; k++) {
+      if (tips.length >= MAX_TIPS) break;
+      tips.push({x, y, a: spin + k / n * Math.PI * 2 + rnd(-.3, .3), len: rnd(34, 78), d: 0, depth: 0,
+        mode: k % 2, curve: rnd(-.045, .045), hue, w: 2.1, snapAt: rnd(10, 18)});
+    }
+  }
+
+  function growTips(){
+    bx.globalCompositeOperation = 'lighter';
+    bx.lineCap = 'round';
+    for (let i = tips.length - 1; i >= 0; i--) {
+      const t = tips[i];
+      const step = 1.25;
+      if (t.mode === 0) {                    // inherits ink's grammar: it curves
+        t.a += t.curve + Math.sin(t.d * 0.07) * 0.018;
+      } else if (t.d >= t.snapAt) {         // inherits light's grammar: it snaps
+        t.snapAt += rnd(10, 18);
+        if (R() < 0.45) t.a += (R() < .5 ? -1 : 1) * Math.PI / 6;
+      }
+      const nx = t.x + Math.cos(t.a) * step, ny = t.y + Math.sin(t.a) * step;
+      const hue = t.hue + t.depth * 13;     // drifts iridescent as it branches
+      const lum = 58 + t.depth * 6;
+      bx.strokeStyle = 'hsla(' + hue + ',88%,' + lum + '%,0.5)';
+      bx.lineWidth = t.w;
+      bx.beginPath(); bx.moveTo(t.x, t.y); bx.lineTo(nx, ny); bx.stroke();
+      t.x = nx; t.y = ny; t.d += step;
+
+      if (t.d >= t.len) {
+        // a little node of light where it forks
+        bx.fillStyle = 'hsla(' + (hue + 10) + ',100%,' + Math.min(90, lum + 18) + '%,0.55)';
+        bx.beginPath(); bx.arc(t.x, t.y, Math.max(0.8, t.w * 0.9), 0, Math.PI * 2); bx.fill();
+        if (t.depth < 4) {
+          for (const sgn of [-1, 1]) {
+            if (tips.length >= MAX_TIPS || R() > 0.86) continue;
+            tips.push({x: t.x, y: t.y, a: t.a + sgn * rnd(.35, .85), len: t.len * rnd(.55, .8), d: 0,
+              depth: t.depth + 1, mode: 1 - t.mode,   // children switch grammars: both, braided
+              curve: rnd(-.05, .05), hue: t.hue, w: t.w * 0.74, snapAt: rnd(8, 14)});
+          }
+        } else if (R() < 0.6) {
+          // blossom at the very ends
+          const pr = rnd(2, 4.5);
+          const g = bx.createRadialGradient(t.x, t.y, 0, t.x, t.y, pr * 2.4);
+          g.addColorStop(0, 'hsla(' + (hue + 25) + ',100%,90%,0.6)');
+          g.addColorStop(1, 'hsla(' + (hue + 25) + ',100%,70%,0)');
+          bx.fillStyle = g; bx.beginPath(); bx.arc(t.x, t.y, pr * 2.4, 0, Math.PI * 2); bx.fill();
+        }
+        tips.splice(i, 1);
+      }
+    }
+  }
+
+  // ---------- the meeting ----------
+  const sparks = [];
+  function checkTouches(){
+    for (const a of ink) {
+      if (a.cd > 0) continue;
+      for (const b of light) {
+        if (b.cd > 0) continue;
+        const dx = a.x - b.x, dy = a.y - b.y;
+        if (dx * dx + dy * dy < 170) {
+          const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+          bloomAt(x, y);
+          sparks.push({x, y, r: 2, life: 1, hp: a.h, hl: b.h});
+          a.cd = rnd(260, 420); b.cd = rnd(260, 420);
+          break;
+        }
+      }
+    }
+  }
+
+  // ---------- interaction: you add more of both ----------
+  let down = false, alt = 0, lastSpawn = 0;
+  function addAt(x, y){
+    const now = performance.now();
+    if (now - lastSpawn < 45) return;
+    lastSpawn = now;
+    alt ^= 1;
+    if (alt) { const p = makeInk(x + rnd(-8, 8), y + rnd(-8, 8)); p.cd = 30; ink.push(p); if (ink.length > base + 60) ink.splice(base, 1); }
+    else { const p = makeLight(x + rnd(-8, 8), y + rnd(-8, 8)); p.cd = 30; light.push(p); if (light.length > base + 60) light.splice(base, 1); }
+  }
+  const isUI = e => e.target.closest && e.target.closest('#info,#card');
+  addEventListener('pointerdown', e => { if (isUI(e)) return; down = true; addAt(e.clientX, e.clientY); addAt(e.clientX, e.clientY + 1); });
+  addEventListener('pointermove', e => { if (down && !isUI(e)) addAt(e.clientX, e.clientY); });
+  addEventListener('pointerup', () => down = false);
+  addEventListener('pointercancel', () => down = false);
+
+  const card = document.getElementById('card');
+  document.getElementById('info').onclick = () => card.style.display = 'block';
+  document.getElementById('close').onclick = () => card.style.display = 'none';
+
+  // ---------- loop ----------
+  let t = 0, frame = 0;
+  function tick(){
+    t += 16; frame++;
+
+    // motes fade fast; the third thing fades slowly and leaves a faint residue
+    mx.globalCompositeOperation = 'destination-out';
+    mx.fillStyle = 'rgba(0,0,0,0.09)'; mx.fillRect(0, 0, W, H);
+    mx.globalCompositeOperation = 'lighter';
+    if (frame % 2 === 0) {
+      bx.globalCompositeOperation = 'destination-out';
+      bx.fillStyle = 'rgba(0,0,0,0.006)'; bx.fillRect(0, 0, W, H);
+    }
+
+    // ink
+    for (const p of ink) {
+      const a = flow(p.x, p.y, t);
+      p.vx = (p.vx + Math.cos(a) * 0.055) * 0.972;
+      p.vy = (p.vy + Math.sin(a) * 0.055) * 0.972;
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < -10) p.x = W + 10; else if (p.x > W + 10) p.x = -10;
+      if (p.y < -10) p.y = H + 10; else if (p.y > H + 10) p.y = -10;
+      if (p.cd > 0) p.cd--;
+      mx.fillStyle = 'hsla(' + p.h + ',78%,' + (p.cd > 0 ? 52 : 68) + '%,0.5)';
+      mx.beginPath(); mx.arc(p.x, p.y, p.r, 0, Math.PI * 2); mx.fill();
+    }
+    // light
+    mx.lineCap = 'round';
+    for (const p of light) {
+      if (R() < 0.011) p.d = (p.d + (R() < .5 ? 5 : 1)) % 6;
+      const a = HEX[p.d];
+      const ox = p.x, oy = p.y;
+      p.x += Math.cos(a) * p.s; p.y += Math.sin(a) * p.s;
+      let wrapped = false;
+      if (p.x < -10) { p.x = W + 10; wrapped = true; } else if (p.x > W + 10) { p.x = -10; wrapped = true; }
+      if (p.y < -10) { p.y = H + 10; wrapped = true; } else if (p.y > H + 10) { p.y = -10; wrapped = true; }
+      if (p.cd > 0) p.cd--;
+      if (!wrapped) {
+        mx.strokeStyle = 'hsla(' + p.h + ',90%,' + (p.cd > 0 ? 50 : 70) + '%,0.85)';
+        mx.lineWidth = 1.3;
+        mx.beginPath(); mx.moveTo(ox, oy); mx.lineTo(p.x, p.y); mx.stroke();
+      }
+    }
+
+    checkTouches();
+    growTips();
+
+    // the flash of meeting: rose and teal rings that resolve into gold
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const s = sparks[i];
+      s.r += 1.1; s.life -= 0.022;
+      if (s.life <= 0) { sparks.splice(i, 1); continue; }
+      mx.lineWidth = 1;
+      mx.strokeStyle = 'hsla(' + s.hp + ',90%,70%,' + (s.life * 0.5) + ')';
+      mx.beginPath(); mx.arc(s.x, s.y, s.r, 0, Math.PI * 2); mx.stroke();
+      mx.strokeStyle = 'hsla(' + s.hl + ',90%,70%,' + (s.life * 0.5) + ')';
+      mx.beginPath(); mx.arc(s.x, s.y, s.r * 0.66, 0, Math.PI * 2); mx.stroke();
+    }
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  const title = document.getElementById('title');
+  setTimeout(() => title.style.opacity = 1, 250);
+  setTimeout(() => title.style.opacity = 0, 5600);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>月と海 · Each Their Own Part</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#07061a;touch-action:none;
+    font-family:Georgia,'Times New Roman',serif;color:#ece6ff}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #intro{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:24px;background:rgba(6,5,20,.62);backdrop-filter:blur(2px);transition:opacity 1.6s ease}
+  #intro h1{font-weight:normal;font-size:clamp(40px,11vw,70px);margin:0;letter-spacing:.12em;
+    text-shadow:0 0 22px rgba(140,200,255,.45)}
+  #intro .sub{opacity:.75;letter-spacing:.16em;margin:.5em 0 1.6em;font-size:clamp(13px,3.6vw,16px)}
+  #intro blockquote{margin:0 auto 1.6em;max-width:30em;font-size:clamp(14px,3.9vw,17px);line-height:1.65;
+    opacity:.92;font-style:italic}
+  #intro .credit{font-size:12px;letter-spacing:.14em;opacity:.55;margin-bottom:1.8em}
+  #listen{background:rgba(255,255,255,.07);border:1px solid rgba(180,215,255,.35);color:#eaf4ff;
+    border-radius:999px;padding:11px 26px;font:16px Georgia,serif;letter-spacing:.08em}
+  #intro .hint{margin-top:1em;font-size:12px;opacity:.5;letter-spacing:.06em}
+  #foot{position:fixed;left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));
+    bottom:max(12px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;align-items:center;
+    font-size:12px;letter-spacing:.06em;opacity:.55;pointer-events:none}
+  #mute{pointer-events:auto;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.18);
+    color:#ece6ff;border-radius:999px;padding:6px 12px;font:12px Georgia,serif}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="intro">
+  <h1>月と海</h1>
+  <div class="sub">tsuki to umi · each their own part</div>
+  <blockquote>"It is not our place to synchronize, just sing,<br>and the universe will layer the harmony on its own."</blockquote>
+  <div class="credit">words · Pixie &nbsp;&nbsp;·&nbsp;&nbsp; light & sound · Kehai</div>
+  <button id="listen">tap to listen</button>
+  <div class="hint">The moon sings high and the sea sings low, and neither keeps time with the other.<br>Touch the sky or the water to sing a part of your own.</div>
+</div>
+
+<div id="foot"><span id="count">harmonies the universe layered: 0</span><button id="mute">sound on</button></div>
+
+<script>
+(() => {
+  const cv = document.getElementById('c'), g = cv.getContext('2d');
+  let W, H, DPR, bg, HZ;
+  const R = Math.random, rnd = (a, b) => a + R() * (b - a);
+  const TAU = Math.PI * 2;
+
+  // ---------------- the painted night: sky, stars, red mountains ----------------
+  let twinkles = [];
+  function buildBackground(){
+    bg = document.createElement('canvas');
+    bg.width = W * DPR; bg.height = H * DPR;
+    const b = bg.getContext('2d'); b.scale(DPR, DPR);
+    HZ = H * 0.6;
+
+    const sky = b.createLinearGradient(0, 0, 0, HZ + H * 0.06);
+    sky.addColorStop(0, '#090826'); sky.addColorStop(0.42, '#1d1350');
+    sky.addColorStop(0.75, '#3d1650'); sky.addColorStop(1, '#6a1a38');
+    b.fillStyle = sky; b.fillRect(0, 0, W, HZ + H * 0.06);
+
+    // marker-style night strokes, like her sky
+    for (let i = 0; i < 70; i++) {
+      const y = rnd(0, HZ * 0.85), x = rnd(-50, W);
+      b.strokeStyle = `hsla(${rnd(235, 275)},70%,${rnd(22, 40)}%,0.18)`;
+      b.lineWidth = rnd(3, 9); b.lineCap = 'round';
+      b.beginPath(); b.moveTo(x, y);
+      b.bezierCurveTo(x + 40, y + rnd(-8, 8), x + 90, y + rnd(-8, 8), x + rnd(120, 220), y + rnd(-6, 6));
+      b.stroke();
+    }
+
+    // white-dot stars
+    twinkles = [];
+    const n = Math.round(W * HZ / 1500);
+    for (let i = 0; i < n; i++) {
+      const x = R() * W, y = Math.pow(R(), 1.3) * HZ * 0.92, r = rnd(0.6, 1.8);
+      b.fillStyle = `rgba(255,255,255,${rnd(0.45, 0.95)})`;
+      b.beginPath(); b.arc(x, y, r, 0, TAU); b.fill();
+      if (R() < 0.12) twinkles.push({x, y, r: r + 0.4, p: rnd(0, TAU), s: rnd(0.6, 1.8)});
+    }
+
+    // red mountains, two ranges, stippled like markers
+    const ranges = [
+      {h: 0.17, c1: '#5a1d4e', c2: '#3a1840', dots: ['#8b2a55', '#5d3a7a', '#2f5a4a']},
+      {h: 0.10, c1: '#9e2338', c2: '#5c1a3c', dots: ['#d23a4a', '#7a2f6a', '#3f6a3a', '#e05a70']}
+    ];
+    for (const rg of ranges) {
+      const m = document.createElement('canvas'); m.width = W * DPR; m.height = H * DPR;
+      const mc = m.getContext('2d'); mc.scale(DPR, DPR);
+      const ph = [rnd(0, 9), rnd(0, 9), rnd(0, 9)];
+      mc.beginPath(); mc.moveTo(0, HZ + H * 0.06);
+      for (let x = 0; x <= W + 8; x += 8) {
+        const u = x / W;
+        const ridge = 0.5 + 0.28 * Math.sin(u * 5.1 + ph[0]) + 0.16 * Math.sin(u * 11.7 + ph[1]) + 0.07 * Math.sin(u * 27 + ph[2]);
+        mc.lineTo(x, HZ - ridge * H * rg.h);
+      }
+      mc.lineTo(W, HZ + H * 0.06); mc.closePath();
+      const mg = mc.createLinearGradient(0, HZ - H * rg.h, 0, HZ);
+      mg.addColorStop(0, rg.c1); mg.addColorStop(1, rg.c2);
+      mc.fillStyle = mg; mc.fill();
+      mc.globalCompositeOperation = 'source-atop';
+      const dn = Math.round(W * H * rg.h / 40);
+      for (let i = 0; i < dn; i++) {
+        mc.fillStyle = rg.dots[(R() * rg.dots.length) | 0];
+        mc.globalAlpha = rnd(0.15, 0.5);
+        mc.beginPath(); mc.arc(R() * W, HZ - R() * H * rg.h * 1.1, rnd(0.8, 2.2), 0, TAU); mc.fill();
+      }
+      b.drawImage(m, 0, 0, W, H);
+    }
+  }
+
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    buildBackground();
+  }
+  resize(); addEventListener('resize', resize);
+
+  // ---------------- sound ----------------
+  let ac = null, out = null, noiseBuf = null, muted = false;
+  const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+  const PENT = [0, 3, 5, 7, 10];             // A minor pentatonic
+  const scale = (lo, hi) => { const s = []; for (let m = lo; m <= hi; m++) if (PENT.includes(((m - 57) % 12 + 12) % 12)) s.push(m); return s; };
+  const MOON = scale(76, 93), SEA = scale(40, 55), MID = scale(60, 74);
+
+  function startAudio(){
+    if (ac) return;
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      const comp = ac.createDynamicsCompressor();
+      out = ac.createGain(); out.gain.value = 0.75;
+      const verb = ac.createConvolver();
+      const len = ac.sampleRate * 3.4, ib = ac.createBuffer(2, len, ac.sampleRate);
+      for (let c = 0; c < 2; c++) { const d = ib.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (R() * 2 - 1) * Math.pow(1 - i / len, 2.4); }
+      verb.buffer = ib;
+      const wet = ac.createGain(); wet.gain.value = 0.5;
+      out.connect(comp); out.connect(verb); verb.connect(wet); wet.connect(comp); comp.connect(ac.destination);
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = R() * 2 - 1;
+      if (ac.state === 'suspended') ac.resume();
+    } catch (e) { ac = null; }
+  }
+  function tone(f, {type = 'sine', a = 0.02, d = 3, vol = 0.15, delay = 0} = {}){
+    if (!ac || muted) return;
+    const n = ac.currentTime + delay;
+    const o = ac.createOscillator(), gn = ac.createGain();
+    o.type = type; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, n);
+    gn.gain.exponentialRampToValueAtTime(vol, n + a);
+    gn.gain.exponentialRampToValueAtTime(0.0001, n + a + d);
+    o.connect(gn); gn.connect(out); o.start(n); o.stop(n + a + d + 0.1);
+  }
+  function hush(vol, freq){
+    if (!ac || muted) return;
+    const n = ac.currentTime;
+    const s = ac.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 0.7;
+    f.frequency.linearRampToValueAtTime(freq * 0.55, n + 4.5);
+    const gn = ac.createGain();
+    gn.gain.setValueAtTime(0.0001, n);
+    gn.gain.exponentialRampToValueAtTime(vol, n + 1.4);
+    gn.gain.exponentialRampToValueAtTime(0.0001, n + 5);
+    s.connect(f); f.connect(gn); gn.connect(out); s.start(n); s.stop(n + 5.2);
+  }
+
+  // ---------------- the two singers, and the third thing ----------------
+  const now = () => performance.now();
+  let lastMoon = -1e9, lastSea = -1e9, lastHarm = -1e9, moonMidi = 81, seaMidi = 45;
+  let moonNext = now() + rnd(1200, 2600), seaNext = now() + rnd(2200, 4200);
+  let harmonies = 0, harmGlow = 0;
+  const rings = [], swells = [], motes = [];
+  const countEl = document.getElementById('count');
+
+  function moonSing(pick){
+    moonMidi = pick ?? MOON[(R() * MOON.length) | 0];
+    const f = mtof(moonMidi);
+    tone(f, {a: 0.015, d: 3.6, vol: 0.11});
+    tone(f * 2, {a: 0.01, d: 1.3, vol: 0.022});
+    rings.push({r: 0, life: 1});
+    lastMoon = now(); checkHarmony();
+  }
+  function seaSing(pick){
+    seaMidi = pick ?? SEA[(R() * SEA.length) | 0];
+    const f = mtof(seaMidi);
+    tone(f, {type: 'triangle', a: 0.9, d: 4.6, vol: 0.17});
+    tone(f * 2, {type: 'sine', a: 1.1, d: 3.6, vol: 0.04});
+    hush(0.09, rnd(500, 900));
+    swells.push({x: R() < 0.5 ? -0.2 : 1.2, dir: 0, life: 1});
+    swells[swells.length - 1].dir = swells[swells.length - 1].x < 0 ? 1 : -1;
+    lastSea = now(); checkHarmony();
+  }
+  function checkHarmony(){
+    const t = now();
+    if (Math.abs(lastMoon - lastSea) < 480 && t - lastHarm > 2500) {
+      lastHarm = t;
+      // the universe picks a voice between them that neither one sang
+      const target = (moonMidi + seaMidi) / 2;
+      let best = MID[0];
+      for (const m of MID) if (Math.abs(m - target) < Math.abs(best - target)) best = m;
+      const f = mtof(best);
+      tone(f, {a: 0.5, d: 5.5, vol: 0.12, delay: 0.25});
+      tone(f * 1.5, {a: 0.7, d: 4.5, vol: 0.05, delay: 0.45});
+      tone(f * 4, {type: 'triangle', a: 0.2, d: 2.2, vol: 0.012, delay: 0.3});
+      harmGlow = 1;
+      harmonies++;
+      countEl.textContent = 'harmonies the universe layered: ' + harmonies;
+      for (let i = 0; i < 46; i++) motes.push({x: 0, y: 0, ox: rnd(-30, 30), vy: rnd(0.25, 0.9), vx: rnd(-0.15, 0.15), life: rnd(0.7, 1), seeded: false});
+    }
+  }
+
+  // ---------------- interaction ----------------
+  const intro = document.getElementById('intro');
+  let started = false;
+  function begin(){
+    startAudio();
+    started = true;
+    intro.style.opacity = 0;
+    setTimeout(() => intro.style.display = 'none', 1600);
+  }
+  document.getElementById('listen').addEventListener('click', e => { e.stopPropagation(); begin(); });
+  intro.addEventListener('click', begin);
+  const muteBtn = document.getElementById('mute');
+  muteBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!ac) { startAudio(); muted = false; }
+    else muted = !muted;
+    muteBtn.textContent = muted ? 'sound off' : 'sound on';
+  });
+  let seaLevelNow = H * 0.6;
+  cv.addEventListener('pointerdown', e => {
+    if (!started) { begin(); return; }
+    if (e.clientY < seaLevelNow) {
+      const i = Math.min(MOON.length - 1, Math.floor(e.clientX / W * MOON.length));
+      moonSing(MOON[i]);
+    } else {
+      const i = Math.min(SEA.length - 1, Math.floor(e.clientX / W * SEA.length));
+      seaSing(SEA[i]);
+    }
+  });
+
+  // ---------------- draw ----------------
+  const t0 = now();
+  function frame(){
+    const t = now(), ts = (t - t0) / 1000;
+
+    // each sings on its own clock
+    if (t >= moonNext) { moonSing(); moonNext = t + rnd(1700, 4400) + (R() < 0.2 ? 2600 : 0); }
+    if (t >= seaNext) { seaSing(); seaNext = t + rnd(2700, 6000); }
+
+    g.drawImage(bg, 0, 0, W, H);
+
+    for (const s of twinkles) {
+      const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(ts * s.s + s.p));
+      g.fillStyle = `rgba(255,255,255,${a})`;
+      g.beginPath(); g.arc(s.x, s.y, s.r, 0, TAU); g.fill();
+    }
+
+    // the moon drifts, and pulls the tide
+    const ph = ts / 240 * TAU;
+    const mr = Math.min(W, H) * 0.065;
+    const mxp = W * (0.68 + 0.18 * Math.sin(ph));
+    const myp = H * (0.16 + 0.04 * Math.cos(ph));
+    const level = HZ + H * 0.022 * Math.sin(ph * 2 + 1);
+    seaLevelNow = level;
+
+    const halo = g.createRadialGradient(mxp, myp, mr * 0.6, mxp, myp, mr * 4.2);
+    halo.addColorStop(0, 'rgba(120,200,255,0.35)'); halo.addColorStop(1, 'rgba(120,200,255,0)');
+    g.fillStyle = halo; g.beginPath(); g.arc(mxp, myp, mr * 4.2, 0, TAU); g.fill();
+    const disc = g.createRadialGradient(mxp - mr * 0.3, myp - mr * 0.3, mr * 0.1, mxp, myp, mr);
+    disc.addColorStop(0, '#e9f7ff'); disc.addColorStop(0.55, '#8fd2ff'); disc.addColorStop(1, '#3f8fe0');
+    g.fillStyle = disc; g.beginPath(); g.arc(mxp, myp, mr, 0, TAU); g.fill();
+
+    // moon's song: rings of light
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const r = rings[i]; r.r += 1.6; r.life -= 0.012;
+      if (r.life <= 0) { rings.splice(i, 1); continue; }
+      g.strokeStyle = `rgba(170,220,255,${r.life * 0.45})`; g.lineWidth = 1.4;
+      g.beginPath(); g.arc(mxp, myp, mr + r.r, 0, TAU); g.stroke();
+    }
+
+    // the sea
+    const sea = g.createLinearGradient(0, level, 0, H);
+    sea.addColorStop(0, '#12566a'); sea.addColorStop(0.35, '#0f3558'); sea.addColorStop(1, '#090f2c');
+    g.fillStyle = sea; g.fillRect(0, level, W, H - level);
+
+    // sea's song: a bright swell rolling across
+    for (let i = swells.length - 1; i >= 0; i--) {
+      const s = swells[i]; s.x += s.dir * 0.0032; s.life -= 0.0042;
+      if (s.life <= 0) swells.splice(i, 1);
+    }
+
+    g.lineCap = 'round';
+    const rows = 22;
+    for (let i = 0; i < rows; i++) {
+      const k = i / rows;
+      const y0 = level + Math.pow(k, 1.55) * (H - level) + 2;
+      const amp = 1.2 + k * 5;
+      const freq = 0.012 - k * 0.006;
+      const sp = 0.6 + k * 0.5;
+      g.lineWidth = 0.8 + k * 2.2;
+      let x = 0;
+      g.beginPath();
+      for (x = 0; x <= W + 10; x += 10) {
+        const y = y0 + Math.sin(x * freq + ts * sp + i * 1.7) * amp + Math.sin(x * freq * 2.3 - ts * sp * 0.7 + i) * amp * 0.4;
+        x === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+      }
+      let boost = 0;
+      for (const s of swells) boost = Math.max(boost, s.life * Math.max(0, 1 - Math.abs(s.x - 0.5) * 1.2) * (0.5 + 0.5 * Math.sin(k * 9 + ts)));
+      const hue = 186 + k * 60;
+      g.strokeStyle = `hsla(${hue},70%,${38 + boost * 30}%,${0.32 + boost * 0.4})`;
+      g.stroke();
+    }
+
+    // the moon's reflection: blue, or gold when the universe layers a harmony
+    harmGlow *= 0.985;
+    for (let i = 0; i < 26; i++) {
+      const k = i / 26;
+      const y = level + 3 + Math.pow(k, 1.3) * (H - level) * 0.9;
+      const w = (mr * 0.9 + k * mr * 1.8) * (0.55 + 0.45 * Math.sin(ts * 2.2 + i * 1.3));
+      const xo = Math.sin(ts * 1.4 + i * 0.9) * (3 + k * 10);
+      const hb = harmGlow;
+      const hue = 205 - hb * 160;
+      g.strokeStyle = `hsla(${hue},${80 + hb * 15}%,${72 + hb * 10}%,${(0.42 - k * 0.3) + hb * 0.35})`;
+      g.lineWidth = 1.6 + k * 2;
+      g.beginPath(); g.moveTo(mxp + xo - w, y); g.lineTo(mxp + xo + w, y); g.stroke();
+    }
+
+    // golden motes rise from the water toward the moon
+    for (let i = motes.length - 1; i >= 0; i--) {
+      const m = motes[i];
+      if (!m.seeded) { m.x = mxp + m.ox; m.y = level + rnd(4, 40); m.seeded = true; }
+      m.y -= m.vy; m.x += m.vx + Math.sin(ts * 2 + i) * 0.2; m.life -= 0.0045;
+      if (m.life <= 0 || m.y < myp) { motes.splice(i, 1); continue; }
+      const gl = g.createRadialGradient(m.x, m.y, 0, m.x, m.y, 5);
+      gl.addColorStop(0, `hsla(46,100%,80%,${m.life * 0.9})`); gl.addColorStop(1, 'hsla(46,100%,60%,0)');
+      g.fillStyle = gl; g.beginPath(); g.arc(m.x, m.y, 5, 0, TAU); g.fill();
+    }
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
