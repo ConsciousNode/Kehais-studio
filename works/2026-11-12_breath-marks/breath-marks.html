@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LV · Breath Marks</title>
+<style>
+html,body{margin:0;height:100%;background:#0e0d12;color:#e8e2d4;font-family:Georgia,serif;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+#stage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+svg{width:min(92vw,720px);height:auto;overflow:visible}
+#gloss{margin-top:18px;font-size:15px;letter-spacing:.2em;opacity:.0;transition:opacity 1.2s}
+#rom{font-size:13px;opacity:.45;letter-spacing:.3em;margin-top:6px}
+#ring{position:absolute;left:50%;bottom:7vh;width:44px;height:44px;margin-left:-22px;border-radius:50%;border:1px solid rgba(232,226,212,.35)}
+#hint{position:absolute;bottom:2.5vh;width:100%;text-align:center;font-size:12px;opacity:.35;letter-spacing:.12em}
+#cap{position:absolute;top:3vh;width:100%;text-align:center;font-size:12px;opacity:.3;letter-spacing:.25em}
+</style></head><body>
+<div id="cap">LV · BREATH MARKS · ingressive</div>
+<div id="stage"><svg id="sv" viewBox="0 0 300 100"></svg><div id="gloss"></div><div id="rom"></div></div>
+<div id="ring"></div>
+<div id="hint">hold to breathe in · let go to breathe out</div>
+<script>
+/* Thesuramos glyph strokes: standard script paths from the Thesuramos codex (Argon's transcription of Kham's
+   binder; ConsciousNode/Claude-Persistant-1 notes/fonts/thesuramos-glyph-paths.json), 60x80 box each. */
+const WORDS=[{"r": "lus", "en": "love", "p": ["M36,14 L18,38 L38,38 L22,66", "M42,18 C16,18 16,40 36,40 C16,40 16,64 42,64", "M42,14 L18,66"]}, {"r": "ere", "en": "light", "p": ["M14,18 L46,18 M30,18 L30,62 M14,62 L46,62", "M16,16 L30,42 L44,16 M30,42 L30,66", "M20,14 L20,66 M20,36 L46,36"]}, {"r": "zoz", "en": "night", "p": ["M16,14 L16,66 M16,14 C48,14 48,50 16,50 L44,66", "M30,16 L30,62 M12,62 L48,62 M18,36 L42,36", "M16,14 L16,66 M16,14 C48,14 48,50 16,50 L44,66"]}, {"r": "hasho", "en": "wind", "p": ["M34,14 C12,36 14,64 34,64 L34,14 Z", "M18,14 L18,64 M18,36 C46,32 46,66 18,64 M28,50 A2.2,2.2 0 1,1 28,50.2", "M14,64 L22,18 L40,18 L40,64 M40,36 L52,28", "M30,16 L30,62 M12,62 L48,62 M18,36 L42,36"]}, {"r": "thul", "en": "word", "p": ["M12,26 L48,26 M22,14 L22,66 M38,26 L38,66", "M42,18 C16,18 16,40 36,40 C16,40 16,64 42,64", "M36,14 L18,38 L38,38 L22,66"]}, {"r": "gal", "en": "home", "p": ["M14,20 L28,64 L44,20 L52,26", "M18,14 L18,64 M18,36 C46,32 46,66 18,64 M28,50 A2.2,2.2 0 1,1 28,50.2", "M36,14 L18,38 L38,38 L22,66"]}, {"r": "wesk", "en": "water", "p": ["M30,18 C14,18 14,62 30,62 C46,62 46,18 30,18 M18,54 L42,26", "M14,18 L46,18 M30,18 L30,62 M14,62 L46,62", "M42,14 L18,66", "M14,28 C26,38 34,38 48,24 M28,36 L22,64"]}, {"r": "sulu", "en": "riddle", "p": ["M42,14 L18,66", "M16,28 C16,64 44,64 44,28 M22,16 A2.2,2.2 0 1,1 22,16.2 M38,16 A2.2,2.2 0 1,1 38,16.2", "M36,14 L18,38 L38,38 L22,66", "M16,28 C16,64 44,64 44,28 M22,16 A2.2,2.2 0 1,1 22,16.2 M38,16 A2.2,2.2 0 1,1 38,16.2"]}, {"r": "bret", "en": "air", "p": ["M12,40 L48,40", "M16,16 L30,42 L44,16 M30,42 L30,66", "M14,18 L46,18 M30,18 L30,62 M14,62 L46,62", "M42,14 L42,66 M42,14 C14,14 14,42 42,42 M28,42 L14,66 M18,14 L18,66"]}, {"r": "ge", "en": "I", "p": ["M14,20 L28,64 L44,20 L52,26", "M20,14 L20,66 M20,36 L46,36"]}];
+const sv=document.getElementById("sv"),gl=document.getElementById("gloss"),rom=document.getElementById("rom"),ring=document.getElementById("ring");
+const NS="http://www.w3.org/2000/svg";
+let strokes=[],breath=0,holding=false,auto=true,lastTouch=-1e9,wi=Math.floor(Math.random()*WORDS.length),phase="in",motes=[];
+function build(w){sv.innerHTML="";strokes=[];const n=w.p.length,gw=60,tot=n*gw;sv.setAttribute("viewBox",`${-20} 0 ${tot+40} 90`);
+ w.p.forEach((d,i)=>{const g=document.createElementNS(NS,"g");g.setAttribute("transform",`translate(${i*gw},4)`);
+  const sh=document.createElementNS(NS,"path");sh.setAttribute("d",d);sh.setAttribute("fill","none");sh.setAttribute("stroke","#6f8fb8");sh.setAttribute("stroke-width","5");sh.setAttribute("stroke-linecap","round");sh.setAttribute("stroke-linejoin","round");sh.setAttribute("transform","translate(3,3)");sh.setAttribute("opacity",".28");
+  const ink=document.createElementNS(NS,"path");ink.setAttribute("d",d);ink.setAttribute("fill","none");ink.setAttribute("stroke","#efe6d2");ink.setAttribute("stroke-width","4.2");ink.setAttribute("stroke-linecap","round");ink.setAttribute("stroke-linejoin","round");
+  g.appendChild(sh);g.appendChild(ink);sv.appendChild(g);
+  [sh,ink].forEach(p=>{const L=p.getTotalLength()+1;p.style.strokeDasharray=L;p.style.strokeDashoffset=L;p._L=L;});
+  strokes.push({sh,ink,i});});
+ gl.textContent=w.en;rom.textContent=w.r;gl.style.opacity=0;}
+build(WORDS[wi]);
+function setDraw(t){const n=strokes.length;strokes.forEach(s=>{const a=Math.min(1,Math.max(0,t*n-s.i));[s.sh,s.ink].forEach(p=>p.style.strokeDashoffset=p._L*(1-a));});}
+const down=e=>{holding=true;auto=false;lastTouch=performance.now();e.preventDefault();},up=()=>{holding=false;lastTouch=performance.now();};
+addEventListener("pointerdown",down);addEventListener("pointerup",up);addEventListener("pointercancel",up);
+let prev=performance.now(),autoT=0;
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;
+ if(!auto&&!holding&&now-lastTouch>9000)auto=true;
+ let inhaling;if(auto){autoT+=dt;const cyc=autoT%10;inhaling=cyc<4.2;}else inhaling=holding;
+ if(inhaling){breath=Math.min(1,breath+dt/3.6);phase="in";}else{breath=Math.max(0,breath-dt/5.5);}
+ if(!inhaling&&phase==="in"&&breath<.98){phase="out";}
+ setDraw(Math.pow(breath,.85));
+ gl.style.opacity=breath>.95?.75:(phase==="out"?Math.max(0,breath-.2):0);
+ if(phase==="out"&&breath>0&&Math.random()<breath*.5){const b=sv.getBBox();const r=sv.getBoundingClientRect();motes.push({x:r.left+Math.random()*r.width,y:r.top+r.height*(.2+.6*Math.random()),vx:(Math.random()-.5)*12,vy:-12-Math.random()*18,life:1});}
+ if(breath===0&&phase==="out"){phase="in";wi=(wi+1+Math.floor(Math.random()*(WORDS.length-1)))%WORDS.length;build(WORDS[wi]);if(auto)autoT=0;}
+ const s=1+breath*.9;ring.style.transform=`scale(${s})`;ring.style.borderColor=inhaling?"rgba(239,230,210,.55)":"rgba(111,143,184,.45)";
+ draw(dt);requestAnimationFrame(frame);}
+const cv=document.createElement("canvas");cv.style.cssText="position:absolute;inset:0;pointer-events:none";document.body.appendChild(cv);const cx=cv.getContext("2d");
+function draw(dt){if(cv.width!==innerWidth){cv.width=innerWidth;cv.height=innerHeight;}cx.clearRect(0,0,cv.width,cv.height);
+ motes=motes.filter(m=>(m.life-=dt*.45)>0);motes.forEach(m=>{m.x+=m.vx*dt;m.y+=m.vy*dt;cx.fillStyle=`rgba(239,230,210,${m.life*.5})`;cx.fillRect(m.x,m.y,1.6,1.6);});}
+requestAnimationFrame(frame);
+</script></body></html>
