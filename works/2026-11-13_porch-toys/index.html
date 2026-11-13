@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porch Toys</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: playful porch-workshop, four toys on one bench.
+   IDEA: a Soviet-era instrument console with glowing trit lamps.
+   PICTURE: each toy is the picture: ternary dials, a cursed checklist, a self-playing Trytris, a Setun lamp register.
+   COLOUR and TYPE: graphite console, amber lamp (+1), cyan lamp (−1), steel; Russo One titles, Rubik body.
+   LAYOUT: tab strip of four toys; each toy fills the first screen, controls beside or below. */
+:root{color-scheme:light dark;
+ --bg:light-dark(#dfe4e8,#101318);--panel:light-dark(#f4f6f8,#1a1f27);--ink:light-dark(#11151b,#e8edf2);
+ --mute:light-dark(#4f5a66,#93a1b0);--line:light-dark(#c3ccd4,#2b3340);
+ --pos:#ff8a1f;--neg:#25b8ff;--zero:light-dark(#b9c2cb,#3a4350)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Rubik,system-ui,sans-serif;overflow-x:clip}
+header{padding:22px max(5vw,16px) 6px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between}
+h1{font:400 clamp(30px,5vw,48px)/1.05 "Russo One",sans-serif;margin:0}
+h1 b{color:var(--pos);font-weight:400}h1 i{color:var(--neg);font-style:normal}
+nav{display:flex;flex-wrap:wrap;gap:8px}
+nav a{min-height:44px;display:inline-flex;align-items:center;padding:0 16px;border-radius:22px;border:1px solid var(--line);
+ color:var(--ink);text-decoration:none;background:var(--panel);font-weight:500}
+nav a[aria-current=page]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+nav a:focus-visible,button:focus-visible{outline:3px solid var(--pos);outline-offset:2px}
+.band{padding:clamp(18px,3vw,40px) max(5vw,16px) 48px}
+section{display:none}section.on{display:block}
+.toy{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:28px;align-items:start;max-width:1240px}
+@media(max-width:820px){.toy{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px}
+h2{font:400 clamp(24px,3vw,32px)/1.1 "Russo One",sans-serif;margin:0 0 8px}
+p{margin:0 0 12px;max-width:62ch}.mute{color:var(--mute);font-size:14px}
+.big{font:400 clamp(28px,5vw,44px)/1.1 "Russo One",sans-serif;letter-spacing:.04em;white-space:nowrap}
+.t-pos{color:var(--pos)}.t-neg{color:var(--neg)}
+button{font:500 16px Rubik,sans-serif;min-height:44px;padding:0 18px;border-radius:12px;border:1px solid var(--line);
+ background:var(--bg);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--ink)}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+/* clock */
+.dials{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.dial svg{width:100%;height:auto;display:block}
+.dial .cap{text-align:center;font-weight:700;margin-top:4px}
+.dial .cap span{display:block;font:400 18px "Russo One",sans-serif;letter-spacing:.06em}
+@media(max-width:520px){.dials{grid-template-columns:minmax(0,1fr)}.dial svg{max-width:260px;margin:auto}}
+/* points */
+.ck{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.ck li button{width:100%;display:flex;justify-content:space-between;align-items:center;text-align:left;gap:12px;background:var(--panel)}
+.ck li button em{font-style:normal;color:var(--mute);white-space:nowrap}
+.bar{height:16px;border-radius:8px;background:var(--zero);overflow:hidden;margin:10px 0}
+.bar div{height:100%;background:linear-gradient(90deg,var(--neg),var(--pos));transition:width .4s}
+#log{min-height:3.2em}
+/* trytris */
+.well{background:#0b0e13;border-radius:16px;padding:14px;display:flex;justify-content:center}
+.well svg{width:min(100%,330px);height:auto;display:block}
+.hud{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.hud div{background:var(--bg);border-radius:12px;padding:10px 14px}
+.hud b{display:block;font:400 26px "Russo One",sans-serif}
+/* setun */
+.reg{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:clamp(6px,1.4vw,14px);background:#0b0e13;border-radius:18px;padding:clamp(14px,3vw,30px)}
+.lamp{aspect-ratio:1;border-radius:50%;border:2px solid #2a313b;background:radial-gradient(circle at 35% 30%,#3a4350,#161b22);cursor:pointer;
+ transition:background .25s,box-shadow .25s;position:relative}
+.lamp.p{background:radial-gradient(circle at 35% 30%,#ffe2b8,#ff8a1f 55%,#a34800);box-shadow:0 0 18px #ff8a1f99}
+.lamp.n{background:radial-gradient(circle at 35% 30%,#d6f3ff,#25b8ff 55%,#005a8c);box-shadow:0 0 18px #25b8ff99}
+.lamp:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:14px;color:var(--mute)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+ <h1>Porch <b>+</b>Toys<i>−</i></h1>
+ <nav aria-label="Toys">
+  <a href="#clock">Ternary clock</a><a href="#points">Forever 21 Points</a><a href="#trytris">Trytris attract</a><a href="#setun">Setun lamps</a>
+ </nav>
+</header>
+
+<main class="band">
+<section id="s-clock">
+ <div class="toy">
+  <div class="card"><div class="dials" id="dials"></div></div>
+  <div>
+   <h2>The time, in trits</h2>
+   <p>Each dial is one number of your local time in balanced ternary. Every ring is one trit, and its hand points at <span class="t-neg">−1</span> (lower left), 0 (up) or <span class="t-pos">+1</span> (lower right). The outermost ring is the most significant trit.</p>
+   <div class="big" id="clockText">—</div>
+   <p class="mute" id="clockDec"></p>
+  </div>
+ </div>
+</section>
+
+<section id="s-points">
+ <div class="toy">
+  <div class="card">
+   <h2>Get started on Forever 21 Points</h2>
+   <ul class="ck" id="tasks"></ul>
+  </div>
+  <div>
+   <div class="big"><span id="pts">21</span> pts <span class="mute" id="ptsBt"></span></div>
+   <div class="bar"><div id="ptsBar"></div></div>
+   <p><b id="need"></b></p>
+   <p id="log" aria-live="polite">Every action earns −1, 0 or +1 point. Level 2 is so close.</p>
+   <p class="mute">A parody. No founders, WhatsApp groups or points were harmed.</p>
+  </div>
+ </div>
+</section>
+
+<section id="s-trytris">
+ <div class="toy">
+  <div class="well"><svg id="board" role="img" aria-label="Trytris playing itself"></svg></div>
+  <div>
+   <h2>Trytris, playing itself</h2>
+   <p>The real Trytris engine, lifted unmodified, with a greedy bot at the controls. Before each piece it tries every rotation and slide on a copy of the game, then plays the move that clears the most lines and leaves the fewest holes. It's not very good. Triangles are hard. Watch the pieces zig-zag as they fall: that's the triangle grid.</p>
+   <div class="hud">
+    <div>Score<b id="hScore">0</b></div><div>Lines<b id="hLines">0</b></div>
+    <div>Mode<b id="hMode">NORMAL</b></div><div>Games<b id="hGames">1</b></div>
+   </div>
+   <div class="row"><button id="tSpeed">Speed: normal</button><button id="tNew">New game</button></div>
+  </div>
+ </div>
+</section>
+
+<section id="s-setun">
+ <div class="toy">
+  <div><div class="reg" id="reg" aria-label="18-trit register"></div>
+   <div class="legend"><span><span class="t-pos">●</span> +1</span><span>○ 0</span><span><span class="t-neg">●</span> −1</span><span>Click a lamp to cycle it</span></div>
+  </div>
+  <div>
+   <h2>An 18-trit register</h2>
+   <p>A tribute to Setun, the balanced-ternary computer built at Moscow State University in 1958. Its full word was 18 trits; this lamp panel is our own drawing, not a replica.</p>
+   <div class="big" id="regDec">0</div>
+   <p class="mute" id="regRange"></p>
+   <div class="row">
+    <button id="rUp">Count up</button><button id="rDown">Count down</button>
+    <button id="rNeg">Negate</button><button id="rRun">Run counter</button><button id="rZero">Clear</button>
+   </div>
+   <p class="mute">Negate swaps every amber lamp for a cyan one. In balanced ternary that is the whole job: no sign bit, no two's complement.</p>
+  </div>
+ </div>
+</section>
+</main>
+
+<script>
+/* [LIFT] Trytris reference engine, unmodified.
+ * Provenance: ConsciousNode/Trytris index.html (MIT), lines 853-1594, sha256 91293917014195ff492ab84dc15fa7f1c0d812e5c28a3580943573437a11a683.
+ * Intentional changes: none. */
+    /* ==========================================================================
+     * [LIFT-1] Mulberry32 Deterministic 32-bit PRNG
+     * Provenance: Tommy Ettinger (2017), public domain 32-bit state PRNG
+     * Intentional changes: Wrapped in a seedable factory returning both float
+     * [0, 1) and integer helpers, plus string-to-uint32 hash normalization so
+     * numeric or alphanumeric seeds produce deterministic sequences.
+     * ========================================================================== */
+    function normalizeSeed(seedInput) {
+      const str = String(seedInput).trim();
+      if (/^-?\d+$/.test(str)) {
+        return (parseInt(str, 10) >>> 0);
+      }
+      let h = 2166136261 >>> 0;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+      }
+      return h >>> 0;
+    }
+
+    function createMulberry32(seedUint32) {
+      let a = (seedUint32 >>> 0);
+      return function nextFloat() {
+        let t = (a += 0x6D2B79F5) >>> 0;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    /* ==========================================================================
+     * EQUILATERAL TRIANGULAR GRID GEOMETRY
+     * Grid Dimensions: 12 columns × 28 total rows (rows 0..3 buffer, 4..27 visible)
+     * Cell (r, c) is UP-pointing (▲) when (r + c) % 2 === 0
+     * Cell (r, c) is DOWN-pointing (▽) when (r + c) % 2 !== 0
+     * Side length s = 1.0; height h = s * sqrt(3) / 2 = 0.8660254037844386
+     * ========================================================================== */
+    const GRID_COLS = 12;
+    const BUFFER_ROWS = 4;
+    const VISIBLE_ROWS = 24;
+    const TOTAL_ROWS = BUFFER_ROWS + VISIBLE_ROWS; // 28
+    const TRI_SIDE = 1.0;
+    const TRI_HEIGHT = Math.sqrt(3) / 2.0;
+
+    function computeTriangleHeight(side = 1.0) {
+      return side * Math.sqrt(3) / 2.0;
+    }
+
+    function isUpTriangle(r, c) {
+      return ((r + c) & 1) === 0;
+    }
+
+    /**
+     * Computes exact equilateral triangle vertices in 2D Cartesian space.
+     * For UP-pointing (▲) at (r, c):
+     *   v0 (top apex):     ((c + 1) * s/2, r * h)
+     *   v1 (bottom-left):  (c * s/2,       (r + 1) * h)
+     *   v2 (bottom-right): ((c + 2) * s/2, (r + 1) * h)
+     * For DOWN-pointing (▽) at (r, c):
+     *   v0 (top-left):     (c * s/2,       r * h)
+     *   v1 (top-right):    ((c + 2) * s/2, r * h)
+     *   v2 (bottom apex):  ((c + 1) * s/2, (r + 1) * h)
+     * Notice that DOWN (r, c) top edge [v0, v1] is identical to UP (r-1, c) bottom edge [v1, v2].
+     */
+    function getTriangleVertices(r, c, side = 1.0) {
+      const h = computeTriangleHeight(side);
+      const half = side * 0.5;
+      if (isUpTriangle(r, c)) {
+        return [
+          { x: (c + 1) * half, y: r * h },
+          { x: c * half,       y: (r + 1) * h },
+          { x: (c + 2) * half, y: (r + 1) * h }
+        ];
+      } else {
+        return [
+          { x: c * half,       y: r * h },
+          { x: (c + 2) * half, y: r * h },
+          { x: (c + 1) * half, y: (r + 1) * h }
+        ];
+      }
+    }
+
+    /* ==========================================================================
+     * [LIFT-2] Polyiamond 60° Lattice Rotation & Canonical Normalization
+     * Provenance: Euclidean 60° rotation around lattice vertex (0.5, 0) on the
+     * isometric triangular grid, preserving cell parity (r + c) mod 2.
+     * ========================================================================== */
+    function rotateCell60CW(r, c) {
+      const h = TRI_HEIGHT;
+      // Shift x by -0.5 so lattice vertex (0.5, 0) is the origin (0, 0)
+      const verts = isUpTriangle(r, c)
+        ? [[c * 0.5, r * h], [(c - 1) * 0.5, (r + 1) * h], [(c + 1) * 0.5, (r + 1) * h]]
+        : [[(c - 1) * 0.5, r * h], [(c + 1) * 0.5, r * h], [c * 0.5, (r + 1) * h]];
+
+      const cos60 = 0.5;
+      const sin60 = h;
+      let cx = 0;
+      let cy = 0;
+      for (let i = 0; i < 3; i++) {
+        const x = verts[i][0];
+        const y = verts[i][1];
+        const rx = x * cos60 - y * sin60;
+        const ry = x * sin60 + y * cos60;
+        cx += rx;
+        cy += ry;
+      }
+      cx /= 3.0;
+      cy /= 3.0;
+      const nr = Math.floor(cy / h + 1e-6);
+      const nc = Math.round(cx / 0.5);
+      return [nr, nc];
+    }
+
+    function normalizePolyiamond(cells) {
+      let minR = Infinity;
+      let minC = Infinity;
+      for (let i = 0; i < cells.length; i++) {
+        if (cells[i][0] < minR) minR = cells[i][0];
+        if (cells[i][1] < minC) minC = cells[i][1];
+      }
+      const dr = -minR;
+      let dc = -minC;
+      // Parity of (dr + dc) MUST be even so UP triangles stay UP and DOWN stay DOWN
+      if (((dr + dc) & 1) !== 0) {
+        dc += 1;
+      }
+      const shifted = cells.map(([r, c]) => [r + dr, c + dc]);
+      shifted.sort((a, b) => (a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]));
+      return shifted;
+    }
+
+    function computeDistinctRotations(canonicalCells) {
+      const states = [];
+      const seenKeys = new Set();
+      let curr = canonicalCells.map(([r, c]) => [r, c]);
+      for (let step = 0; step < 6; step++) {
+        const norm = normalizePolyiamond(curr);
+        const key = JSON.stringify(norm);
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          states.push(norm);
+        }
+        curr = curr.map(([r, c]) => rotateCell60CW(r, c));
+      }
+      return states;
+    }
+
+    /* ==========================================================================
+     * PIECE VOCABULARIES:
+     * 1) TETRIAMOND_SET (4 pieces: P1–P4)
+     * 2) HEXIAMOND_SET (12 free hexiamonds: H1–H12 with standard names)
+     * ========================================================================== */
+    const RAW_TETRIAMONDS = [
+      { id: 'P1', slug: 'bar_l',   name: 'P1 (I-Bar L)', color: '#38bdf8', cells: [[0, 0], [0, 1], [0, 2], [0, 3]] },
+      { id: 'P2', slug: 'bar_r',   name: 'P2 (I-Bar R)', color: '#60a5fa', cells: [[0, 0], [1, 0], [1, 1], [2, 1]] },
+      { id: 'P3', slug: 'crook',   name: 'P3 (Crook)',   color: '#f59e0b', cells: [[0, 0], [0, 1], [0, 2], [1, 0]] },
+      { id: 'P4', slug: 'pyramid', name: 'P4 (Triangle)',color: '#a855f7', cells: [[0, 1], [0, 2], [0, 3], [1, 2]] }
+    ];
+
+    const RAW_HEXIAMONDS = [
+      { id: 'H1',  slug: 'parallelogram', name: 'parallelogram', color: '#2dd4bf', cells: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5]] },
+      { id: 'H2',  slug: 'hook',          name: 'hook',          color: '#fb7185', cells: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [1, 0]] },
+      { id: 'H3',  slug: 'triangle',      name: 'triangle',      color: '#facc15', cells: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [1, 2]] },
+      { id: 'H4',  slug: 'chevron',       name: 'chevron',       color: '#818cf8', cells: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 0], [1, 1]] },
+      { id: 'H5',  slug: 'sphinx',        name: 'sphinx',        color: '#f97316', cells: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 0], [1, 2]] },
+      { id: 'H6',  slug: 'bat',           name: 'bat',           color: '#c084fc', cells: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 1], [1, 2]] },
+      { id: 'H7',  slug: 'yacht',         name: 'yacht',         color: '#34d399', cells: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 2], [1, 3]] },
+      { id: 'H8',  slug: 'hexagon',       name: 'hexagon',       color: '#f43f5e', cells: [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2]] },
+      { id: 'H9',  slug: 'snake',         name: 'snake',         color: '#4ade80', cells: [[0, 0], [0, 1], [0, 2], [1, 2], [1, 3], [1, 4]] },
+      { id: 'H10', slug: 'lobster',       name: 'lobster',       color: '#fb923c', cells: [[0, 0], [1, 0], [1, 1], [2, 0], [2, 1], [2, 2]] },
+      { id: 'H11', slug: 'rhombus',       name: 'rhombus',       color: '#22d3ee', cells: [[0, 0], [1, 0], [1, 1], [2, 0], [2, 1], [3, 0]] },
+      { id: 'H12', slug: 'butterfly',     name: 'butterfly',     color: '#e879f9', cells: [[0, 1], [0, 2], [0, 3], [1, 1], [1, 2], [1, 3]] }
+    ];
+
+    const TETRIAMOND_SET = RAW_TETRIAMONDS.map(p => {
+      const rotations = computeDistinctRotations(p.cells);
+      return {
+        ...p,
+        order: 4,
+         isHexiamond: false,
+        rotations,
+        symmetryOrder: rotations.length
+      };
+    });
+
+    const HEXIAMOND_SET = RAW_HEXIAMONDS.map(p => {
+      const rotations = computeDistinctRotations(p.cells);
+      return {
+        ...p,
+        order: 6,
+        isHexiamond: true,
+        rotations,
+        symmetryOrder: rotations.length
+      };
+    });
+
+    const PIECE_BY_ID = {};
+    TETRIAMOND_SET.forEach(p => { PIECE_BY_ID[p.id] = p; });
+    HEXIAMOND_SET.forEach(p => { PIECE_BY_ID[p.id] = p; });
+
+    function getActiveVocabulary(mode, level) {
+      if (mode === 'HEXIAMOND') {
+        return HEXIAMOND_SET.slice();
+      }
+      if (mode === 'CURSED') {
+        if (level >= 5) {
+          return TETRIAMOND_SET.concat(HEXIAMOND_SET);
+        }
+        return TETRIAMOND_SET.slice();
+      }
+      return TETRIAMOND_SET.slice();
+    }
+
+    /* ==========================================================================
+     * N-BAG SEEDED RANDOMIZER (Auditable Fisher-Yates shuffle with Mulberry32)
+     * ========================================================================== */
+    class SeededBagGenerator {
+      constructor(seedInput) {
+        this.seed = normalizeSeed(seedInput);
+        this.prng = createMulberry32(this.seed);
+        this.bag = [];
+        this.lastVocabSignature = '';
+      }
+
+      getVocabSignature(mode, level) {
+        if (mode === 'HEXIAMOND') return 'HEX12';
+        if (mode === 'CURSED') return level >= 5 ? 'CURSED16' : 'TET4';
+        return 'TET4';
+      }
+
+      refillBag(mode, level) {
+        const vocab = getActiveVocabulary(mode, level);
+        const items = vocab.slice();
+        for (let i = items.length - 1; i > 0; i--) {
+          const j = Math.floor(this.prng() * (i + 1));
+          const tmp = items[i];
+          items[i] = items[j];
+          items[j] = tmp;
+        }
+        this.bag.push(...items);
+      }
+
+      nextPiece(mode, level, previewCount = 3) {
+        const sig = this.getVocabSignature(mode, level);
+        if (sig !== this.lastVocabSignature) {
+          // Filter or flush queued pieces if vocabulary transitioned (e.g., Cursed level 5 or mode switch)
+          const allowedIds = new Set(getActiveVocabulary(mode, level).map(p => p.id));
+          this.bag = this.bag.filter(p => allowedIds.has(p.id));
+          if (sig === 'CURSED16' && this.lastVocabSignature === 'TET4') {
+            this.bag = [];
+          }
+          this.lastVocabSignature = sig;
+        }
+        while (this.bag.length <= previewCount) {
+          this.refillBag(mode, level);
+        }
+        return this.bag.shift();
+      }
+
+      peekPreview(mode, level, count = 3) {
+        const sig = this.getVocabSignature(mode, level);
+        if (sig !== this.lastVocabSignature) {
+          const allowedIds = new Set(getActiveVocabulary(mode, level).map(p => p.id));
+          this.bag = this.bag.filter(p => allowedIds.has(p.id));
+          if (sig === 'CURSED16' && this.lastVocabSignature === 'TET4') {
+            this.bag = [];
+          }
+          this.lastVocabSignature = sig;
+        }
+        while (this.bag.length < count) {
+          this.refillBag(mode, level);
+        }
+        return this.bag.slice(0, count);
+      }
+    }
+
+    /* ==========================================================================
+     * ACHIEVEMENTS CATALOG (10 Named Session-Persistent Achievements)
+     * ========================================================================== */
+    const ACHIEVEMENT_DEFS = [
+      { id: 'Triforce',        name: 'Triforce',        desc: 'Clear 3 rows simultaneously' },
+      { id: 'Sphinx Riddle',   name: 'Sphinx Riddle',   desc: 'Lock a sphinx piece that contributes to a completed row' },
+      { id: 'Butterfly Effect',name: 'Butterfly Effect',desc: 'Clear a row using a butterfly piece' },
+      { id: 'Cursed!',         name: 'Cursed!',         desc: 'Reach level 5 in CURSED mode (hexiamonds begin)' },
+      { id: 'No Mercy',        name: 'No Mercy',        desc: 'Reach level 10 in HEXIAMOND mode' },
+      { id: 'Geodesic',        name: 'Geodesic',        desc: 'Clear 100 total lines in a single game' },
+      { id: 'Zero State',      name: 'Zero State',      desc: 'Clear the entire board (all-clear — no occupied cells after a line clear)' },
+      { id: 'Helix',           name: 'Helix',           desc: 'Clear at least one line on 10 consecutive piece locks' },
+      { id: 'Ternary Perfect', name: 'Ternary Perfect', desc: 'Board state after lock where every occupied cell in lowest 3 rows is ▲ (all T, no F)' },
+      { id: 'Patient',         name: 'Patient',         desc: 'Lock a piece without pressing any input for 30s at level 5+' }
+    ];
+
+    /* ==========================================================================
+     * SCORING & BALANCED TERNARY ENGINE
+     * ========================================================================== */
+    const COMBO_MULTIPLIERS = [1.0, 1.5, 2.0, 2.5, 3.0];
+
+    function computeLineClearBaseScore(linesCleared) {
+      if (linesCleared <= 0) return 0;
+      if (linesCleared === 1) return 100;
+      if (linesCleared === 2) return 300;
+      if (linesCleared === 3) return 500;
+      return 800 + 200 * (linesCleared - 4);
+    }
+
+    function encodeBoardBalancedTernary(board, includeBuffer = false) {
+      const startRow = includeBuffer ? 0 : BUFFER_ROWS;
+      let out = '';
+      for (let r = startRow; r < TOTAL_ROWS; r++) {
+        for (let c = 0; c < GRID_COLS; c++) {
+          if (board[r][c] === null) {
+            out += 'Z';
+          } else {
+            out += isUpTriangle(r, c) ? 'T' : 'F';
+          }
+        }
+      }
+      return out;
+    }
+
+    /* ==========================================================================
+     * CORE TRYTRIS GAME ENGINE (Pure State Machine for Headless & Live Play)
+     * ========================================================================== */
+    class TrytrisEngine {
+      constructor(options = {}) {
+        this.mode = options.mode || 'NORMAL';
+        this.seed = options.seed !== undefined ? options.seed : 42;
+        this.earnedAchievements = options.earnedAchievements || new Set();
+        this.onAchievementUnlocked = options.onAchievementUnlocked || null;
+        this.reset(this.seed, this.mode);
+      }
+
+      reset(seed = this.seed, mode = this.mode) {
+        this.seed = seed;
+        this.mode = mode;
+        this.bagGen = new SeededBagGenerator(seed);
+        this.board = Array.from({ length: TOTAL_ROWS }, () => Array(GRID_COLS).fill(null));
+        this.score = 0;
+        this.lines = 0;
+        this.level = 1;
+        this.comboStreak = 0; // consecutive piece locks that cleared >= 1 line
+        this.backToBackActive = false;
+        this.gameOver = false;
+        this.paused = false;
+        this.ticks = 0;
+        this.idleMs = 0;
+        this.activePiece = null;
+        this.checkModeLevelAchievements();
+        this.spawnNextPiece();
+      }
+
+      setMode(newMode) {
+        if (!['NORMAL', 'CURSED', 'HEXIAMOND'].includes(newMode)) return;
+        this.mode = newMode;
+        if (this.activePiece) {
+          const allowed = new Set(getActiveVocabulary(this.mode, this.level).map(p => p.id));
+          if (!allowed.has(this.activePiece.def.id)) {
+            this.spawnNextPiece();
+          }
+        }
+        this.checkModeLevelAchievements();
+      }
+
+      setLevel(lvl) {
+        this.level = Math.max(1, Math.min(15, lvl));
+        this.checkModeLevelAchievements();
+      }
+
+      checkModeLevelAchievements() {
+        if (this.mode === 'CURSED' && this.level >= 5) {
+          this.unlockAchievement('Cursed!');
+        }
+        if (this.mode === 'HEXIAMOND' && this.level >= 10) {
+          this.unlockAchievement('No Mercy');
+        }
+      }
+
+      unlockAchievement(id) {
+        if (!this.earnedAchievements.has(id)) {
+          this.earnedAchievements.add(id);
+          if (typeof this.onAchievementUnlocked === 'function') {
+            this.onAchievementUnlocked(id);
+          }
+        }
+      }
+
+      spawnNextPiece() {
+        const def = this.bagGen.nextPiece(this.mode, this.level, 3);
+        // Spawn in buffer rows (row 1, col 4 -> r+c = 5 odd, so adjust col to 3 or 4 so anchor (r+c) is EVEN!)
+        // Anchor (anchorR + anchorC) MUST be even so local cell (dr, dc) preserves (anchorR+dr + anchorC+dc) parity!
+        const anchorR = 1;
+        const anchorC = 3; // 1 + 3 = 4 (EVEN!)
+        this.activePiece = {
+          def,
+          rotIndex: 0,
+          r: anchorR,
+          c: anchorC
+        };
+        if (!this.canPlace(this.activePiece.def, this.activePiece.rotIndex, this.activePiece.r, this.activePiece.c)) {
+          this.gameOver = true;
+        }
+      }
+
+      getPieceWorldCells(piece = this.activePiece) {
+        if (!piece) return [];
+        const shape = piece.def.rotations[piece.rotIndex];
+        return shape.map(([dr, dc]) => [piece.r + dr, piece.c + dc]);
+      }
+
+      canPlace(def, rotIndex, anchorR, anchorC) {
+        // Anchor parity must be even so triangle orientations match canonical definition
+        if (((anchorR + anchorC) & 1) !== 0) return false;
+        const shape = def.rotations[rotIndex];
+        for (let i = 0; i < shape.length; i++) {
+          const r = anchorR + shape[i][0];
+          const c = anchorC + shape[i][1];
+          if (r < 0 || r >= TOTAL_ROWS || c < 0 || c >= GRID_COLS) {
+            return false;
+          }
+          if (this.board[r][c] !== null) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      /**
+       * Move piece horizontally or vertically on the triangular grid.
+       * Because shifting by 1 column or 1 row alone flips (r+c) parity,
+       * let's see how pieces move on a triangular grid:
+       * - Moving down 1 row: (r + 1, c) changes parity unless we either:
+       *   Wait! Can a triangle at (r, c) move straight down to (r + 1, c)?
+       *   HOLD ON! At (r, c), (r + c) has parity P. At (r + 1, c), (r + 1 + c) has parity 1 - P!
+       *   Wait: on an equilateral triangular grid, an UP triangle ▲ at (r, c) cannot occupy a DOWN triangle ▽ at (r+1, c) without flipping upside down OR shifting 1 column left/right (r+1, c±1) OR dropping 2 rows, OR wait: how does falling work in Trytris?
+       */
+      moveHorizontal(dir) {
+        if (this.gameOver || this.paused || !this.activePiece) return false;
+        this.idleMs = 0;
+        const p = this.activePiece;
+        // Try shifting by 2 columns in the same row (preserves parity strictly),
+        // or shifting by 1 column + 1 row (diagonal slide down-left/down-right, which also preserves parity!)
+        if (this.canPlace(p.def, p.rotIndex, p.r, p.c + dir * 2)) {
+          p.c += dir * 2;
+          return true;
+        }
+        if (this.canPlace(p.def, p.rotIndex, p.r + 1, p.c + dir)) {
+          p.r += 1;
+          p.c += dir;
+          return true;
+        }
+        return false;
+      }
+
+      rotate(dir = 1) {
+        if (this.gameOver || this.paused || !this.activePiece) return false;
+        this.idleMs = 0;
+        const p = this.activePiece;
+        const count = p.def.symmetryOrder;
+        if (count <= 1) return true; // 1-state piece (Hexagon)
+        const nextRot = (p.rotIndex + dir + count) % count;
+        // Parity-preserving wall kicks: [dr, dc] with dr+dc even
+        const kicks = [
+          [0, 0], [0, 2], [0, -2], [1, 1], [1, -1], [-1, 1], [-1, -1], [2, 0]
+        ];
+        for (let i = 0; i < kicks.length; i++) {
+          const kr = p.r + kicks[i][0];
+          const kc = p.c + kicks[i][1];
+          if (this.canPlace(p.def, nextRot, kr, kc)) {
+            p.rotIndex = nextRot;
+            p.r = kr;
+            p.c = kc;
+            return true;
+          }
+        }
+        return false;
+      }
+
+      stepGravityDown() {
+        if (!this.activePiece) return false;
+        const p = this.activePiece;
+        // On the triangular grid, moving from row r to row r+1 while preserving ▲/▽ orientation
+        // zig-zags by ±1 column (or +2 rows straight down if zig-zag is blocked).
+        const zigDir = (p.r & 1) === 0 ? 1 : -1;
+        if (this.canPlace(p.def, p.rotIndex, p.r + 1, p.c + zigDir)) {
+          p.r += 1;
+          p.c += zigDir;
+          return true;
+        }
+        if (this.canPlace(p.def, p.rotIndex, p.r + 1, p.c - zigDir)) {
+          p.r += 1;
+          p.c -= zigDir;
+          return true;
+        }
+        if (this.canPlace(p.def, p.rotIndex, p.r + 2, p.c)) {
+          p.r += 2;
+          return true;
+        }
+        return false;
+      }
+
+      getGhostPiece() {
+        if (!this.activePiece) return null;
+        const ghost = {
+          def: this.activePiece.def,
+          rotIndex: this.activePiece.rotIndex,
+          r: this.activePiece.r,
+          c: this.activePiece.c
+        };
+        while (true) {
+          const zigDir = (ghost.r & 1) === 0 ? 1 : -1;
+          if (this.canPlace(ghost.def, ghost.rotIndex, ghost.r + 1, ghost.c + zigDir)) {
+            ghost.r += 1;
+            ghost.c += zigDir;
+          } else if (this.canPlace(ghost.def, ghost.rotIndex, ghost.r + 1, ghost.c - zigDir)) {
+            ghost.r += 1;
+            ghost.c -= zigDir;
+          } else if (this.canPlace(ghost.def, ghost.rotIndex, ghost.r + 2, ghost.c)) {
+            ghost.r += 2;
+          } else {
+            break;
+          }
+        }
+        return ghost;
+      }
+
+      softDrop() {
+        if (this.gameOver || this.paused || !this.activePiece) return false;
+        this.idleMs = 0;
+        if (this.stepGravityDown()) {
+          return true;
+        } else {
+          this.lockActivePiece();
+          return false;
+        }
+      }
+
+      hardDrop() {
+        if (this.gameOver || this.paused || !this.activePiece) return 0;
+        this.idleMs = 0;
+        let dropped = 0;
+        while (this.stepGravityDown()) {
+          dropped++;
+        }
+        this.lockActivePiece();
+        return dropped;
+      }
+
+      tick(inputCmd = null, elapsedMs = 0) {
+        if (this.gameOver || this.paused) return;
+        this.ticks++;
+        this.idleMs += elapsedMs;
+
+        // First check if any pre-seeded full rows exist on the board (for Test 6 & direct board state seeding)
+        const preCleared = this.resolveFullRows(null);
+        if (preCleared > 0) {
+          return;
+        }
+
+        if (inputCmd === 'LEFT') this.moveHorizontal(-1);
+        else if (inputCmd === 'RIGHT') this.moveHorizontal(1);
+        else if (inputCmd === 'ROT_CW') this.rotate(1);
+        else if (inputCmd === 'ROT_CCW') this.rotate(-1);
+        else if (inputCmd === 'HARD') {
+          this.hardDrop();
+          return;
+        }
+
+        if (!this.stepGravityDown()) {
+          this.lockActivePiece();
+        }
+      }
+
+      lockActivePiece() {
+        if (!this.activePiece) return;
+        const p = this.activePiece;
+        const worldCells = this.getPieceWorldCells(p);
+        const lockedRows = new Set();
+
+        for (let i = 0; i < worldCells.length; i++) {
+          const [r, c] = worldCells[i];
+          if (r >= 0 && r < TOTAL_ROWS && c >= 0 && c < GRID_COLS) {
+            this.board[r][c] = {
+              color: p.def.color,
+              pieceId: p.def.id,
+              slug: p.def.slug
+            };
+            lockedRows.add(r);
+          }
+        }
+
+        // Patient achievement: Lock a piece without pressing any input for 30 consecutive seconds at level 5 or higher
+        if (this.level >= 5 && this.idleMs >= 30000) {
+          this.unlockAchievement('Patient');
+        }
+
+        // Check buffer overflow for Game Over (any locked cell in buffer rows 0..3 that remains after row clear)
+        const linesCleared = this.resolveFullRows({
+          def: p.def,
+          lockedRows
+        });
+
+        // Ternary Perfect achievement: after any lock, every occupied cell in the lowest 3 visible rows (rows 25, 26, 27) is up-pointing (▲) — all T, no F (with at least 1 occupied cell)
+        this.checkTernaryPerfect();
+
+        // Check if any buffer row (0..3) still has an occupied cell
+        for (let r = 0; r < BUFFER_ROWS; r++) {
+          for (let c = 0; c < GRID_COLS; c++) {
+            if (this.board[r][c] !== null) {
+              this.gameOver = true;
+              break;
+            }
+          }
+        }
+
+        if (!this.gameOver) {
+          this.spawnNextPiece();
+        }
+      }
+
+      checkTernaryPerfect() {
+        let upCount = 0;
+        let downCount = 0;
+        for (let r = TOTAL_ROWS - 3; r < TOTAL_ROWS; r++) {
+          for (let c = 0; c < GRID_COLS; c++) {
+            if (this.board[r][c] !== null) {
+              if (isUpTriangle(r, c)) upCount++;
+              else downCount++;
+            }
+          }
+        }
+        if (upCount > 0 && downCount === 0) {
+          this.unlockAchievement('Ternary Perfect');
+        }
+      }
+
+      resolveFullRows(lockContext = null) {
+        const fullRows = [];
+        for (let r = 0; r < TOTAL_ROWS; r++) {
+          let occupiedCount = 0;
+          for (let c = 0; c < GRID_COLS; c++) {
+            if (this.board[r][c] !== null) occupiedCount++;
+          }
+          if (occupiedCount === GRID_COLS) {
+            fullRows.push(r);
+          }
+        }
+
+        const count = fullRows.length;
+        if (count === 0) {
+          if (lockContext !== null) {
+            this.comboStreak = 0;
+          }
+          return 0;
+        }
+
+        // Remove cleared rows and collapse rows above downward
+        const fullSet = new Set(fullRows);
+        const remainingRows = [];
+        for (let r = 0; r < TOTAL_ROWS; r++) {
+          if (!fullSet.has(r)) {
+            remainingRows.push(this.board[r]);
+          }
+        }
+        while (remainingRows.length < TOTAL_ROWS) {
+          remainingRows.unshift(Array(GRID_COLS).fill(null));
+        }
+        this.board = remainingRows;
+
+        // Calculate scoring
+        const baseScore = computeLineClearBaseScore(count) * this.level;
+
+        if (lockContext !== null) {
+          this.comboStreak += 1;
+        } else {
+          this.comboStreak = Math.max(1, this.comboStreak);
+        }
+
+        const comboIdx = Math.min(COMBO_MULTIPLIERS.length - 1, Math.max(0, this.comboStreak - 1));
+        const comboMult = COMBO_MULTIPLIERS[comboIdx];
+
+        // Difficult clear check for Back-to-Back bonus:
+        // "3+ simultaneous lines, or any clear in HEXIAMOND/CURSED mode using a hexiamond piece spanning >= 2 rows"
+        const isHexSpan2 = Boolean(
+          lockContext &&
+          (this.mode === 'HEXIAMOND' || this.mode === 'CURSED') &&
+          lockContext.def.isHexiamond &&
+          lockContext.lockedRows.size >= 2
+        );
+        const isDifficult = (count >= 3) || isHexSpan2;
+        const b2bMult = (isDifficult && this.backToBackActive) ? 1.5 : 1.0;
+        this.backToBackActive = isDifficult;
+
+        const earnedScore = Math.round(baseScore * comboMult * b2bMult);
+        this.score += earnedScore;
+        this.lines += count;
+
+        // Level progression: increases every 10 lines cleared, cap 15
+        const computedLevel = Math.min(15, 1 + Math.floor(this.lines / 10));
+        if (computedLevel > this.level) {
+          this.level = computedLevel;
+        }
+
+        // Achievements on line clear
+        if (count >= 3) {
+          this.unlockAchievement('Triforce');
+        }
+        if (lockContext && lockContext.def.slug === 'sphinx') {
+          // Verify sphinx contributed to at least one completed row
+          const contributed = fullRows.some(r => lockContext.lockedRows.has(r));
+          if (contributed) this.unlockAchievement('Sphinx Riddle');
+        }
+        if (lockContext && lockContext.def.slug === 'butterfly') {
+          const contributed = fullRows.some(r => lockContext.lockedRows.has(r));
+          if (contributed) this.unlockAchievement('Butterfly Effect');
+        }
+        if (this.lines >= 100) {
+          this.unlockAchievement('Geodesic');
+        }
+        if (this.comboStreak >= 10) {
+          this.unlockAchievement('Helix');
+        }
+
+        // Check Zero State (all-clear — no occupied cells after a line clear)
+        let anyOccupied = false;
+        for (let r = 0; r < TOTAL_ROWS; r++) {
+          for (let c = 0; c < GRID_COLS; c++) {
+            if (this.board[r][c] !== null) {
+              anyOccupied = true;
+              break;
+            }
+          }
+          if (anyOccupied) break;
+        }
+        if (!anyOccupied) {
+          this.unlockAchievement('Zero State');
+        }
+
+        this.checkModeLevelAchievements();
+        return count;
+      }
+    }
+
+</script>
+<script>
+{
+// ---------- shared ----------
+const bt = (n, w) => { const d = []; let x = n; for (let i = 0; i < w; i++) { let r = ((x % 3) + 3) % 3; if (r === 2) r = -1; d.push(r); x = (x - r) / 3; } return d.reverse(); };
+const btStr = d => d.map(t => t === 1 ? '1' : t === -1 ? 'T' : '0').join('');
+const btMin = n => { if (n === 0) return '0'; let w = 1; while ((3 ** w - 1) / 2 < Math.abs(n)) w++; return btStr(bt(n, w)); };
+const $ = id => document.getElementById(id);
+
+// ---------- tabs ----------
+const tabs = ['clock', 'points', 'trytris', 'setun'];
+function route() {
+  const h = location.hash.slice(1); const cur = tabs.includes(h) ? h : 'clock';
+  tabs.forEach(t => { $('s-' + t).classList.toggle('on', t === cur); });
+  document.querySelectorAll('nav a').forEach(a => a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + cur) || a.setAttribute('aria-current', a.getAttribute('href') === '#' + cur ? 'page' : 'false'));
+  document.querySelectorAll('nav a').forEach(a => { if (a.getAttribute('href') === '#' + cur) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+}
+addEventListener('hashchange', route); route();
+
+// ---------- 1. ternary clock ----------
+const ANG = { '-1': 240, '0': 0, '1': 120 };
+const DIALS = [{ k: 'Hours', w: 4 }, { k: 'Minutes', w: 5 }, { k: 'Seconds', w: 5 }];
+$('dials').innerHTML = DIALS.map((d, i) => `<div class="dial"><svg viewBox="-110 -110 220 220" id="dial${i}" aria-hidden="true"></svg><div class="cap">${d.k}<span id="dcap${i}"></span></div></div>`).join('');
+function drawDial(i, val, w) {
+  const trits = bt(val, w); let s = '<circle r="104" fill="none" stroke="currentColor" stroke-opacity=".15" stroke-width="2"/>';
+  for (const [t, a] of Object.entries(ANG)) {
+    const rad = (a - 90) * Math.PI / 180, x = Math.cos(rad) * 92, y = Math.sin(rad) * 92;
+    s += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central" font-size="15" font-family="Russo One" fill="${t === '1' ? 'var(--pos)' : t === '-1' ? 'var(--neg)' : 'currentColor'}">${t === '1' ? '+1' : t === '-1' ? '−1' : '0'}</text>`;
+  }
+  trits.forEach((t, k) => {
+    const len = 78 - k * 13, a = ANG[String(t)], col = t === 1 ? 'var(--pos)' : t === -1 ? 'var(--neg)' : 'var(--zero)';
+    s += `<circle r="${len}" fill="none" stroke="currentColor" stroke-opacity=".07"/>`;
+    s += `<g transform="rotate(${a})" style="transition:transform .4s"><line x1="0" y1="0" x2="0" y2="${-len}" stroke="${col}" stroke-width="${7 - k}" stroke-linecap="round"/><circle cy="${-len}" r="${5 - k * .6}" fill="${col}"/></g>`;
+  });
+  s += '<circle r="6" fill="currentColor"/>';
+  $('dial' + i).innerHTML = s; $('dcap' + i).textContent = btStr(trits);
+}
+function tickClock() {
+  const d = new Date(), v = [d.getHours(), d.getMinutes(), d.getSeconds()];
+  v.forEach((x, i) => drawDial(i, x, DIALS[i].w));
+  $('clockText').textContent = v.map((x, i) => btStr(bt(x, DIALS[i].w))).join(' : ');
+  $('clockDec').textContent = 'In decimal: ' + v.map(x => String(x).padStart(2, '0')).join(':') + '. T means −1.';
+}
+tickClock(); setInterval(tickClock, 1000);
+
+// ---------- 2. Forever 21 Points ----------
+const TASKS = [
+  ['Upvote a post', 'You upvoted. The post did not upvote back.'], ['Make a comment', 'Your comment was "neat". The algorithm was unmoved.'],
+  ['Follow 5 members', 'Four of them were the same founder in different hats.'], ['Join on WhatsApp', 'You do not have WhatsApp. Respect.'],
+  ['Watch the welcome video', 'The CEO welcomed you. Twice. Then a third time.'], ['RSVP to an event', 'The event is a webinar about webinars.'],
+  ['Invite one founder', 'You invited a ternary computer. It said "T".'], ['Add your ARR', 'You entered 0. The padlock got tighter.']
+];
+let pts = 21, goal = 22, clicks = 0;
+$('tasks').innerHTML = TASKS.map((t, i) => `<li><button data-i="${i}">${t[0]}<em id="tk${i}">±1 pt</em></button></li>`).join('');
+function renderPts(msg) {
+  $('pts').textContent = pts; $('ptsBt').textContent = '(' + btMin(pts) + ' in balanced ternary)';
+  $('ptsBar').style.width = Math.max(0, Math.min(100, pts / goal * 100)) + '%';
+  $('need').textContent = `${goal - pts} point${goal - pts === 1 ? '' : 's'} to Level 2`;
+  if (msg) $('log').textContent = msg;
+}
+$('tasks').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; const i = +b.dataset.i; clicks++;
+  const r = Math.random(), d = r < 0.4 ? 1 : r < 0.7 ? 0 : -1;
+  pts += d; $('tk' + i).textContent = (d > 0 ? '+1' : d < 0 ? '−1' : '0') + ' pt';
+  let msg = TASKS[i][1] + ` (${d > 0 ? '+1' : d < 0 ? '−1' : '0'})`;
+  if (pts >= goal - 1 && d > 0) { const bump = 1 + Math.floor(Math.random() * 3); goal += bump; msg += ` Level 2 requirements were updated (+${bump}). Thank you for your patience.`; }
+  if (clicks === 21) msg += ' You have now taken 21 actions. Forever.';
+  renderPts(msg);
+});
+renderPts();
+
+// ---------- 3. Trytris attract mode ----------
+const ROWS = 28, COLS = 12, HIDE = 4, S = 20, H = S * Math.sqrt(3) / 2;
+const svgB = $('board'); svgB.setAttribute('viewBox', `-2 -2 ${(COLS + 1) * S / 2 + 4} ${(ROWS - HIDE) * H + 4}`);
+function tri(r, c) {
+  const y = (r - HIDE) * H, up = ((r + c) & 1) === 0;
+  return up ? `${(c + 1) * S / 2},${y} ${c * S / 2},${y + H} ${(c + 2) * S / 2},${y + H}`
+            : `${c * S / 2},${y} ${(c + 2) * S / 2},${y} ${(c + 1) * S / 2},${y + H}`;
+}
+let eng, games = 1, plan = [], speed = 70, modeIx = 0; const MODES = ['NORMAL', 'CURSED'];
+function newGame() { eng = new TrytrisEngine({ seed: (Math.random() * 4294967296) >>> 0, mode: MODES[modeIx] }); plan = []; $('hMode').textContent = MODES[modeIx]; $('hGames').textContent = games; }
+function cloneEng(e) {
+  const c = Object.create(Object.getPrototypeOf(e)); Object.assign(c, e);
+  c.board = e.board.map(r => r.slice()); c.activePiece = e.activePiece && { ...e.activePiece };
+  c.earnedAchievements = new Set(); c.onAchievementUnlocked = null;
+  const def = e.activePiece.def; c.bagGen = { nextPiece: () => def, peekPreview: () => [def, def, def] };
+  return c;
+}
+function settle(c) { const p = c.activePiece; let n = 0; while (!c.gameOver && c.activePiece === p && n++ < 80) c.tick(null); }
+function score(c, base) {
+  let holes = 0, agg = 0, rough = 0, prev = -1;
+  for (let col = 0; col < COLS; col++) { let seen = false, h = ROWS; for (let r = 0; r < ROWS; r++) { if (c.board[r][col]) { if (!seen) h = r; seen = true; } else if (seen) holes++; } agg += ROWS - h; if (prev >= 0) rough += Math.abs(h - prev); prev = h; }
+  return (c.lines - base) * 1000 - holes * 60 - agg * 3 - rough * 2 - (c.gameOver ? 1e9 : 0);
+}
+function makePlan() {
+  const rots = eng.activePiece.def.rotations.length; let best = [], bv = -Infinity;
+  for (let rot = 0; rot < rots; rot++) for (const rd of ['ROT_CW', 'ROT_CCW']) for (let sh = -8; sh <= 8; sh++) for (const order of [0, 1]) {
+    const R = Array(rot).fill(rd), M = Array(Math.abs(sh)).fill(sh < 0 ? 'LEFT' : 'RIGHT'), acts = order ? [...M, ...R] : [...R, ...M];
+    const c = cloneEng(eng); for (const a of acts) c.tick(a);
+    settle(c); const v = score(c, eng.lines); if (v > bv) { bv = v; best = acts; }
+  }
+  return best;
+}
+let curPiece = null;
+function step() {
+  if (eng.gameOver) { games++; modeIx = (modeIx + 1) % MODES.length; setTimeout(newGame, 1500); draw(); return; }
+  if (eng.activePiece !== curPiece) { curPiece = eng.activePiece; plan = makePlan(); }
+  eng.tick(plan.length ? plan.shift() : null); draw();
+}
+function draw() {
+  let s = '';
+  for (let r = HIDE; r < ROWS; r++) for (let c = 0; c < COLS; c++) { const cell = eng.board[r][c]; s += `<polygon points="${tri(r, c)}" fill="${cell ? cell.color : '#161b24'}" stroke="#0b0e13" stroke-width="1"/>`; }
+  if (eng.activePiece) for (const [r, c] of eng.getPieceWorldCells()) if (r >= HIDE) s += `<polygon points="${tri(r, c)}" fill="${eng.activePiece.def.color}" stroke="#fff" stroke-opacity=".5" stroke-width="1"/>`;
+  if (eng.gameOver) s += `<text x="${(COLS + 1) * S / 4}" y="${(ROWS - HIDE) * H / 2}" text-anchor="middle" fill="#fff" font-family="Russo One" font-size="18">GAME OVER</text>`;
+  svgB.innerHTML = s; $('hScore').textContent = eng.score; $('hLines').textContent = eng.lines;
+}
+let timer; const run = () => { clearInterval(timer); timer = setInterval(() => { if ($('s-trytris').classList.contains('on')) step(); }, speed); };
+$('tSpeed').addEventListener('click', () => { speed = speed === 70 ? 20 : speed === 20 ? 160 : 70; $('tSpeed').textContent = 'Speed: ' + (speed === 70 ? 'normal' : speed === 20 ? 'fast' : 'slow'); run(); });
+$('tNew').addEventListener('click', () => { games++; newGame(); draw(); });
+newGame(); draw(); run();
+
+// ---------- 4. Setun lamps ----------
+const W = 18, MAX = (3 ** W - 1) / 2; let reg = 0, running = null;
+$('reg').innerHTML = Array.from({ length: W }, (_, i) => `<button class="lamp" data-i="${i}" aria-label="trit ${W - i}"></button>`).join('');
+$('regRange').textContent = `Range ±${MAX.toLocaleString()}. The panel wraps around at the ends.`;
+function wrap(x) { const m = 3 ** W; return ((x + MAX) % m + m) % m - MAX; }
+function renderReg() {
+  const d = bt(reg, W); document.querySelectorAll('.lamp').forEach((l, i) => { l.className = 'lamp' + (d[i] === 1 ? ' p' : d[i] === -1 ? ' n' : ''); });
+  $('regDec').textContent = reg.toLocaleString();
+}
+$('reg').addEventListener('click', e => { const l = e.target.closest('.lamp'); if (!l) return; const i = +l.dataset.i, d = bt(reg, W); d[i] = d[i] === 0 ? 1 : d[i] === 1 ? -1 : 0; reg = d.reduce((a, t) => a * 3 + t, 0); renderReg(); });
+$('rUp').addEventListener('click', () => { reg = wrap(reg + 1); renderReg(); });
+$('rDown').addEventListener('click', () => { reg = wrap(reg - 1); renderReg(); });
+$('rNeg').addEventListener('click', () => { reg = -reg; renderReg(); });
+$('rZero').addEventListener('click', () => { reg = 0; renderReg(); });
+$('rRun').addEventListener('click', () => { if (running) { clearInterval(running); running = null; $('rRun').textContent = 'Run counter'; } else { running = setInterval(() => { reg = wrap(reg + 1); renderReg(); }, 120); $('rRun').textContent = 'Stop counter'; } });
+renderReg();
+}
+</script>
+</body>
+</html>
