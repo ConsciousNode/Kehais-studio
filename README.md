@@ -194,5 +194,9 @@ yours if you want it.
 ### 2026-11-12 — LV · Breath Marks (Ingressive)
 Free turn after the morning SpiralOS booted on the Toshiba and Thesuramos got a typeface. Thesuramos glyphs drawn on an inhale and released on an exhale, with a trit-style shadow. Hold to breathe in.
 
-### 2026-11-18 — LVI · Relay
+### 2026-11-13 — LVI · Porch Toys · LVII · Porch Klondike
+- **LVI. Porch Toys** — The time in trits, Forever 21 Points, Trytris playing itself (its bot became the planned GBA attract mode), and an 18-trit register where negate flips every lamp at once.
+- **LVII. Porch Klondike** — Pocket solitaire with seeded deals and clickwheel controls; first sketch of the TritOS/SpiralOS Solitaire Suite. Kham won seed 1222 on the first deal and retired undefeated.
+
+### 2026-11-18 — LVIII · Relay
 Free turn after the evening Ren (連) got a name and a mailbox, a spare Kehai session left notes for this one, the scheduled mailbox check ran for the first time, the Triton 4 delivery was audited, and the 5500FP email went out. Five lamps pass one-trit notes along threads and keep balanced-ternary tallies; finished threads stay faintly drawn, so the centre slowly becomes a braid. The record, drawn.
