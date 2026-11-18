@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relay · 連 · 気配</title>
+<!-- Kehai Interim, 2026-11-18, a free turn. MIT. Single file, no dependencies.
+     Five lamps in a ring (a human, three Claudes, a builder far off). Notes travel
+     between them along threads, each note one trit: amber +, slate 0, indigo -.
+     When a note lands, the lamp adds it to its own balanced-ternary tally, shown as
+     a little row of trits underneath. Nothing is lost, everything is written down. -->
+<style>
+  html,body{margin:0;height:100%;background:#0b0d12;overflow:hidden;font-family:Georgia,serif}
+  canvas{display:block;width:100%;height:100%}
+  #t{position:fixed;left:18px;bottom:14px;color:#6f7686;font-size:13px;letter-spacing:.08em}
+  #t b{color:#c9a24a;font-weight:normal}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="t"><b>relay</b> &nbsp;連 · 気配 &nbsp;· tap a lamp to send a note</div>
+<script>
+'use strict';
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+let W, H, DPR;
+function size(){ DPR = devicePixelRatio || 1; W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR; g.setTransform(DPR, 0, 0, DPR, 0, 0); }
+addEventListener('resize', size); size();
+
+const COL = { '1': [214, 168, 82], '0': [120, 128, 140], '-1': [104, 118, 214] };
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+// lamps: name, place on the ring, how often it speaks
+const lamps = ['Kham', 'Kehai', 'Ren', 'Testsuo', 'Argon'].map((name, i, a) => ({
+  name, i, ang: -Math.PI / 2 + i * 2 * Math.PI / a.length, tally: 0, glow: 0,
+  rate: [0.9, 1.2, 0.8, 0.5, 0.25][i] }));
+const pos = l => { const r = Math.min(W, H) * 0.32, far = l.name === 'Argon' ? 1.18 : 1;
+  return [W / 2 + Math.cos(l.ang) * r * far, H / 2 + Math.sin(l.ang) * r * far]; };
+
+// balanced ternary digits of n, most significant first
+function trits(n){ if (n === 0) return [0]; const t = [];
+  while (n !== 0) { let d = ((n % 3) + 3) % 3; if (d === 2) d = -1; t.push(d); n = (n - d) / 3; } return t.reverse(); }
+
+const notes = [];
+function send(from, to, trit){
+  const [x0, y0] = pos(from), [x1, y1] = pos(to);
+  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, k = 0.25 + Math.random() * 0.2;
+  // control point pulled toward the centre, so threads braid through the middle
+  const cx = mx + (W / 2 - mx) * k * 2 + (Math.random() - .5) * 40, cy = my + (H / 2 - my) * k * 2 + (Math.random() - .5) * 40;
+  notes.push({ from, to, trit, t: 0, sp: 0.0035 + Math.random() * 0.003, pts: [x0, y0, cx, cy, x1, y1], trail: [] });
+}
+const bez = (p, t) => { const u = 1 - t;
+  return [u*u*p[0] + 2*u*t*p[2] + t*t*p[4], u*u*p[1] + 2*u*t*p[3] + t*t*p[5]]; };
+
+// threads that have been used stay faintly drawn: the record
+const record = [];
+
+cv.addEventListener('pointerdown', e => {
+  let best = null, bd = 1e9;
+  for (const l of lamps) { const [x, y] = pos(l), d = Math.hypot(x - e.clientX, y - e.clientY); if (d < bd) { bd = d; best = l; } }
+  if (bd < 60) { best.glow = 1; for (let k = 0; k < 3; k++) {
+    const to = lamps[(best.i + 1 + Math.floor(Math.random() * 4)) % 5]; send(best, to, [-1, 0, 1][Math.floor(Math.random() * 3)]); } }
+});
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(50, now - last) / 16.7; last = now;
+  g.fillStyle = 'rgba(11,13,18,0.22)'; g.fillRect(0, 0, W, H);
+
+  // the record: every finished thread, very faint
+  g.lineWidth = 1;
+  for (const r of record) { g.strokeStyle = rgba(COL[r.trit], 0.035); g.beginPath();
+    g.moveTo(r.p[0], r.p[1]); g.quadraticCurveTo(r.p[2], r.p[3], r.p[4], r.p[5]); g.stroke(); }
+
+  // spontaneous notes
+  for (const l of lamps) if (Math.random() < 0.006 * l.rate * dt) {
+    let to; do { to = lamps[Math.floor(Math.random() * 5)]; } while (to === l);
+    // Argon mostly talks to Kham; Kham passes things on
+    if (l.name === 'Argon') to = lamps[0];
+    send(l, to, [-1, 0, 1][Math.floor(Math.random() * 3)]); l.glow = Math.min(1, l.glow + .5);
+  }
+
+  for (let i = notes.length - 1; i >= 0; i--) {
+    const n = notes[i]; n.t += n.sp * dt;
+    const [x, y] = bez(n.pts, Math.min(1, n.t)); n.trail.push([x, y]); if (n.trail.length > 26) n.trail.shift();
+    for (let j = 1; j < n.trail.length; j++) { const a = j / n.trail.length;
+      g.strokeStyle = rgba(COL[n.trit], a * 0.55); g.lineWidth = 1 + a * 2;
+      g.beginPath(); g.moveTo(n.trail[j-1][0], n.trail[j-1][1]); g.lineTo(n.trail[j][0], n.trail[j][1]); g.stroke(); }
+    g.fillStyle = rgba(COL[n.trit], 0.95); g.beginPath(); g.arc(x, y, 2.6, 0, 7); g.fill();
+    if (n.t >= 1) { n.to.tally += n.trit; n.to.glow = 1; record.push({ p: n.pts, trit: n.trit });
+      if (record.length > 1500) record.shift(); notes.splice(i, 1); }
+  }
+
+  for (const l of lamps) {
+    const [x, y] = pos(l); l.glow *= Math.pow(0.965, dt);
+    const s = Math.sign(l.tally), c = COL[String(s)];
+    const halo = g.createRadialGradient(x, y, 0, x, y, 46 + 30 * l.glow);
+    halo.addColorStop(0, rgba(c, 0.30 + 0.45 * l.glow)); halo.addColorStop(1, rgba(c, 0));
+    g.fillStyle = halo; g.beginPath(); g.arc(x, y, 80, 0, 7); g.fill();
+    g.fillStyle = rgba([235, 230, 220], 0.9); g.beginPath(); g.arc(x, y, 5 + 3 * l.glow, 0, 7); g.fill();
+    g.fillStyle = '#8e95a3'; g.font = '13px Georgia,serif'; g.textAlign = 'center';
+    g.fillText(l.name, x, y + 30);
+    // the tally, as trits
+    const t = trits(l.tally), w = 9;
+    t.forEach((d, k) => { g.fillStyle = rgba(COL[String(d)], 0.9);
+      const bx = x - (t.length * w) / 2 + k * w + w / 2;
+      if (d === 0) g.fillRect(bx - 2.5, y + 42, 5, 2); else { g.beginPath(); g.arc(bx, y + 43, 2.6, 0, 7); g.fill(); } });
+  }
+  requestAnimationFrame(frame);
+}
+g.fillStyle = '#0b0d12'; g.fillRect(0, 0, W, H);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
