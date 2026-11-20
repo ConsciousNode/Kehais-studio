@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Elder · Devonian Dandies</title>
+<!-- Kehai Interim, 2026-11-19, a free turn. MIT. Single file, no dependencies.
+     Two arachnid cousins across ~410 million years. On the left, a harvestman
+     (Opiliones): one fused body, very long legs, no silk, no venom. It looks the
+     same in every era, because the Rhynie chert fossils already look modern.
+     On the right, the spider line keeps changing outfits: a silk-sheet proto-spider
+     with a lace cravat, trapdoor burrows, trip lines (silk as a doorbell), sheet webs,
+     the orb web, and finally a Joro in gold silk on a Ninety Six porch.
+     Built from a porch conversation with Kham and Pixie. The cousins split earlier
+     than either fossil record shows. This is a family feud, not a line of descent.
+     Tap: next era. Drag the timeline: scrub. -->
+<style>
+  html,body{margin:0;height:100%;background:#0d0f0c;overflow:hidden;font-family:Georgia,serif;
+    -webkit-user-select:none;user-select:none;touch-action:none}
+  canvas{display:block;width:100%;height:100%}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+let W, H, DPR;
+function size(){ DPR = devicePixelRatio || 1; W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR; g.setTransform(DPR, 0, 0, DPR, 0, 0); }
+addEventListener('resize', size); size();
+
+// ---- eras (dates are the ones from the conversation; fossil dates are minimums) ----
+const ERAS = [
+  { ma: 410, name: 'Early Devonian · ~410 Ma', line: 'Rhynie chert. The elder is already here, already dressed like this. No true spiders yet.',
+    sky: [[22,30,24],[46,52,34]], plants: 'rhynie', silk: 'none', spider: null },
+  { ma: 380, name: 'Middle Devonian · ~380 Ma', line: 'Attercopus spins silk in sheets, not webs. Not a true spider yet. Decor before function: a cravat.',
+    sky: [[24,30,28],[54,56,38]], plants: 'rhynie', silk: 'sheet', spider: 'atter' },
+  { ma: 315, name: 'Carboniferous · ~315 Ma', line: 'The first true spiders. They live in silk-lined burrows with trapdoors.',
+    sky: [[18,28,22],[40,58,36]], plants: 'fern', silk: 'burrow', spider: 'meso' },
+  { ma: 290, name: 'Late Carboniferous–Permian', line: 'Trip lines run out from the door. Silk as a doorbell, before it was ever a net.',
+    sky: [[20,26,24],[52,54,40]], plants: 'fern', silk: 'trip', spider: 'meso' },
+  { ma: 240, name: 'Triassic · ~240 Ma', line: 'Modern-type spiders. The lace starts getting ideas: sheets strung between stems.',
+    sky: [[26,26,30],[62,52,44]], plants: 'fern', silk: 'tangle', spider: 'aranea' },
+  { ma: 150, name: 'Jurassic–Cretaceous', line: 'The orb web shows up. The spider goes from cravat to chandelier.',
+    sky: [[16,20,34],[58,50,62]], plants: 'cycad', silk: 'orb', spider: 'orb' },
+  { ma: 0, name: 'Now · Ninety Six, SC', line: 'A Joro in gold silk, calm enough for photos. The elder, still in the same cologne.',
+    sky: [[10,12,24],[44,34,52]], plants: 'grass', silk: 'gold', spider: 'joro' },
+];
+const N = ERAS.length, SEG = 11;          // seconds per era
+let t = 0, auto = true, scrubbing = false, last = performance.now();
+const outfitAt = i => { let n = 0, prev = null;
+  for (let k = 0; k <= i; k++) { const s = ERAS[k].spider + ERAS[k].silk; if (ERAS[k].spider && s !== prev) n++; prev = s; } return n; };
+
+// ---- helpers ----
+const mix = (a, b, f) => a.map((v, i) => v + (b[i] - v) * f);
+const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const ease = x => x < .5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
+function rnd(seed){ let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+
+// stars, fixed
+const stars = (() => { const r = rnd(7), a = []; for (let i = 0; i < 90; i++) a.push([r(), r() * .55, r()]); return a; })();
+
+function sky(e, gy, alpha){
+  const gr = g.createLinearGradient(0, 0, 0, gy);
+  gr.addColorStop(0, rgb(e.sky[0], alpha)); gr.addColorStop(1, rgb(e.sky[1], alpha));
+  g.fillStyle = gr; g.fillRect(0, 0, W, gy);
+}
+
+function plants(kind, gy, s, seed){
+  const r = rnd(seed); g.lineCap = 'round';
+  const n = Math.round(W / (26 * s));
+  for (let i = 0; i < n; i++) {
+    const x = (i + r() * .8) * W / n, h = (30 + r() * 60) * s;
+    if (Math.abs(x - W * .28) < 90 * s && kind !== 'grass') continue;
+    if (kind === 'rhynie') {            // leafless forked stalks
+      g.strokeStyle = 'rgba(90,118,66,.75)'; g.lineWidth = 2.2 * s;
+      const fork = (x0, y0, len, ang, d) => {
+        const x1 = x0 + Math.sin(ang) * len, y1 = y0 - Math.cos(ang) * len;
+        g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+        if (d > 0) { fork(x1, y1, len * .7, ang - .35, d - 1); fork(x1, y1, len * .7, ang + .35, d - 1); }
+        else { g.fillStyle = 'rgba(150,120,60,.8)'; g.beginPath(); g.ellipse(x1, y1, 2.4 * s, 3.6 * s, ang, 0, 7); g.fill(); }
+      };
+      fork(x, gy, h * .45, (r() - .5) * .2, 2);
+    } else if (kind === 'fern' || kind === 'cycad') {
+      g.strokeStyle = kind === 'fern' ? 'rgba(70,110,60,.7)' : 'rgba(84,104,58,.7)'; g.lineWidth = 1.6 * s;
+      const lean = (r() - .5) * .6, hh = h * (kind === 'cycad' ? .7 : 1);
+      g.beginPath(); g.moveTo(x, gy); g.quadraticCurveTo(x + lean * hh, gy - hh * .6, x + lean * hh * 1.6, gy - hh); g.stroke();
+      for (let k = 1; k < 9; k++) {
+        const f = k / 9, px = x + lean * hh * 1.6 * f * f, py = gy - hh * f, L = (1 - f) * 14 * s + 4 * s;
+        g.beginPath(); g.moveTo(px, py); g.lineTo(px - L, py - L * .4); g.moveTo(px, py); g.lineTo(px + L, py - L * .4); g.stroke();
+      }
+    } else {                              // grass
+      g.strokeStyle = 'rgba(78,96,56,.7)'; g.lineWidth = 1.3 * s;
+      for (let k = 0; k < 3; k++) { const lean = (r() - .5) * 18 * s, hh = h * (.4 + r() * .5);
+        g.beginPath(); g.moveTo(x + k * 3, gy); g.quadraticCurveTo(x + k * 3, gy - hh * .6, x + k * 3 + lean, gy - hh); g.stroke(); }
+    }
+  }
+}
+
+// ---- the elder: Opiliones. Never changes. ----
+function harvestman(x, gy, s, time){
+  const bob = Math.sin(time * 1.7) * 3 * s + Math.max(0, Math.sin(time * .53)) ** 12 * 10 * s;
+  const by = gy - 62 * s - bob, bx = x;
+  const feet = [-170, -120, -78, -40, 40, 78, 120, 170];
+  g.strokeStyle = 'rgba(150,112,70,.95)'; g.lineWidth = 1.4 * s; g.lineCap = 'round'; g.lineJoin = 'round';
+  feet.forEach((fx, i) => {
+    const sway = Math.sin(time * 1.3 + i) * 2 * s;
+    const footX = bx + fx * s + sway, kneeX = bx + fx * s * .42, kneeY = by - (46 + (i % 4) * 9) * s + bob * .4;
+    g.beginPath(); g.moveTo(bx + (fx > 0 ? 4 : -4) * s, by); g.lineTo(kneeX, kneeY); g.lineTo(footX, gy); g.stroke();
+  });
+  // one fused body: no waist
+  const gr = g.createRadialGradient(bx - 3 * s, by - 3 * s, 1, bx, by, 11 * s);
+  gr.addColorStop(0, '#b28a5c'); gr.addColorStop(1, '#5e4127');
+  g.fillStyle = gr; g.beginPath(); g.ellipse(bx, by, 11 * s, 8 * s, 0, 0, 7); g.fill();
+  g.fillStyle = '#1a120b'; g.beginPath(); g.arc(bx - 2 * s, by - 6 * s, 1.4 * s, 0, 7); g.arc(bx + 2 * s, by - 6 * s, 1.4 * s, 0, 7); g.fill(); // two eyes on a turret
+}
+
+// ---- the cousin: spider bodies by era ----
+const LOOK = {
+  atter: { ceph: '#6b5236', abd: '#5a432c', bands: null, legs: 'rgba(120,92,60,.95)', leg: 30 },
+  meso:  { ceph: '#6d4a2c', abd: '#7a5634', bands: 'seg', legs: 'rgba(120,84,52,.95)', leg: 34 },
+  aranea:{ ceph: '#77736a', abd: '#8b8476', bands: null, legs: 'rgba(140,134,122,.95)', leg: 36 },
+  orb:   { ceph: '#9a8460', abd: '#b39a6c', bands: 'chev', legs: 'rgba(150,130,96,.95)', leg: 40 },
+  joro:  { ceph: '#2b2f3c', abd: '#e6c33e', bands: 'joro', legs: 'rgba(40,40,46,.95)', leg: 54 },
+};
+function spiderBody(kind, x, y, s, upright, time, cravat){
+  const L = LOOK[kind], leg = L.leg * s;
+  g.strokeStyle = L.legs; g.lineWidth = (kind === 'joro' ? 1.6 : 1.9) * s; g.lineCap = 'round'; g.lineJoin = 'round';
+  for (let side = -1; side <= 1; side += 2) for (let k = 0; k < 4; k++) {
+    const twitch = Math.sin(time * 2 + k * 1.7 + side) * .04;
+    let a; if (upright) a = (side < 0 ? Math.PI : 0) + side * (-0.9 + k * 0.55) * -1 + twitch;
+    else a = (side < 0 ? Math.PI : 0) + side * (-0.6 + k * 0.38) + twitch;
+    const kx = x + Math.cos(a) * leg * .55, ky = y + (upright ? Math.sin(a) * leg * .55 : -leg * .35);
+    const fx = x + Math.cos(a) * leg * (upright ? 1.05 : 1), fy = upright ? y + Math.sin(a) * leg * 1.05 : y + 6 * s;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(kx, ky); g.lineTo(fx, fy); g.stroke();
+    if (kind === 'joro') {                               // banded legs
+      g.strokeStyle = 'rgba(214,180,60,.85)'; g.lineWidth = 1.2 * s;
+      g.beginPath(); g.moveTo(kx, ky); g.lineTo(kx + (fx - kx) * .18, ky + (fy - ky) * .18); g.stroke();
+      g.strokeStyle = L.legs; g.lineWidth = 1.6 * s;
+    }
+  }
+  // cephalothorax + abdomen: the split body
+  const ax = x + (upright ? 0 : 16 * s), ay = y + (upright ? 20 * s : -4 * s);
+  const aw = (kind === 'joro' ? 11 : 9) * s, ah = (kind === 'joro' ? 19 : 12) * s;
+  g.fillStyle = L.abd; g.beginPath(); g.ellipse(ax, ay, upright ? aw : ah, upright ? ah : aw, 0, 0, 7); g.fill();
+  if (L.bands === 'seg') { g.strokeStyle = 'rgba(40,26,14,.6)'; g.lineWidth = 1.2 * s;
+    for (let k = -2; k <= 2; k++) { g.beginPath(); g.moveTo(ax + k * 4 * s, ay - aw * .9); g.lineTo(ax + k * 4 * s, ay + aw * .9); g.stroke(); } }
+  if (L.bands === 'chev') { g.strokeStyle = 'rgba(70,52,30,.7)'; g.lineWidth = 1.4 * s;
+    for (let k = -1; k <= 2; k++) { const yy = ay + k * 5 * s; g.beginPath(); g.moveTo(ax - aw * .7, yy - 3 * s); g.lineTo(ax, yy); g.lineTo(ax + aw * .7, yy - 3 * s); g.stroke(); } }
+  if (L.bands === 'joro') {
+    g.fillStyle = '#3a4a78';
+    for (let k = -2; k <= 2; k++) { g.beginPath(); g.ellipse(ax, ay + k * 6.5 * s, aw * .95, 1.6 * s, 0, 0, 7); g.fill(); }
+    g.fillStyle = '#c23b2a'; g.beginPath(); g.ellipse(ax, ay + ah * .82, 3 * s, 2.2 * s, 0, 0, 7); g.fill();
+  }
+  g.fillStyle = L.ceph; g.beginPath(); g.ellipse(x, y, 7 * s, 6 * s, 0, 0, 7); g.fill();
+  if (cravat > 0) {                                      // the lace, Devonian dandy edition
+    g.fillStyle = `rgba(240,236,224,${.85 * cravat})`; g.strokeStyle = `rgba(200,196,186,${cravat})`; g.lineWidth = .8 * s;
+    for (let k = 0; k < 5; k++) { const cx = x - 8 * s, cy = y - 4 * s + k * 2.4 * s;
+      g.beginPath(); g.arc(cx, cy, 2.6 * s, Math.PI * .5, Math.PI * 1.5); g.fill(); g.stroke(); }
+  }
+}
+
+// ---- silk ----
+function silk(kind, x, gy, s, time, a){
+  g.lineCap = 'round';
+  const white = (al) => `rgba(232,232,224,${al * a})`;
+  if (kind === 'sheet') {
+    g.strokeStyle = white(.45); g.lineWidth = .9 * s;
+    for (let k = 0; k < 9; k++) { g.beginPath(); g.moveTo(x - 90 * s, gy - k * 1.3 * s);
+      g.bezierCurveTo(x - 30 * s, gy - 10 * s - k * s, x + 30 * s, gy + 4 * s - k * 2 * s, x + 90 * s, gy - k * 1.1 * s); g.stroke(); }
+    g.fillStyle = white(.35);                         // scalloped lace edge
+    for (let xx = -88; xx <= 88; xx += 8) { g.beginPath(); g.arc(x + xx * s, gy - 11 * s, 3.4 * s, Math.PI, 0); g.fill(); }
+  }
+  if (kind === 'burrow' || kind === 'trip') {
+    g.fillStyle = `rgba(8,6,4,${a})`; g.beginPath(); g.ellipse(x, gy + 2 * s, 20 * s, 7 * s, 0, 0, 7); g.fill();
+    g.strokeStyle = white(.5); g.lineWidth = 1.1 * s; g.beginPath(); g.ellipse(x, gy + 2 * s, 20 * s, 7 * s, 0, 0, 7); g.stroke();
+    const open = .45 + Math.sin(time * .9) * .1;      // the trapdoor, hinged at the back
+    g.save(); g.translate(x + 20 * s, gy); g.rotate(-open * 1.4);
+    g.fillStyle = `rgba(92,70,44,${a})`; g.beginPath(); g.ellipse(-20 * s, 0, 21 * s, 4 * s, 0, 0, 7); g.fill(); g.restore();
+    if (kind === 'trip') {
+      g.strokeStyle = white(.6); g.lineWidth = .9 * s;
+      for (let k = 0; k < 9; k++) { const ang = Math.PI + (k / 8) * Math.PI; const len = (70 + (k % 3) * 30) * s;
+        const pluck = Math.sin(time * 3 + k) * .8 * s;
+        g.beginPath(); g.moveTo(x + Math.cos(ang) * 18 * s, gy + 3 * s);
+        g.quadraticCurveTo(x + Math.cos(ang) * len * .5, gy + 3 * s - 4 * s + pluck, x + Math.cos(ang) * len, gy + 2 * s - Math.sin(ang) * len * .06); g.stroke(); }
+    }
+  }
+  if (kind === 'tangle') {
+    const l = x - 80 * s, r = x + 80 * s, top = gy - 120 * s;
+    g.strokeStyle = `rgba(80,110,60,${.8 * a})`; g.lineWidth = 2 * s;
+    g.beginPath(); g.moveTo(l, gy); g.lineTo(l + 6 * s, top); g.moveTo(r, gy); g.lineTo(r - 6 * s, top); g.stroke();
+    g.strokeStyle = white(.4); g.lineWidth = .8 * s;
+    for (let k = 0; k <= 10; k++) { const f = k / 10, y0 = gy - 60 * s;
+      g.beginPath(); g.moveTo(l + 4 * s, y0 - f * 10 * s); g.quadraticCurveTo(x, y0 + 26 * s - f * 6 * s, r - 4 * s, y0 - f * 10 * s); g.stroke(); }
+    const rr = rnd(11);
+    for (let k = 0; k < 16; k++) { g.beginPath(); g.moveTo(l + 5 * s + rr() * 150 * s, top + rr() * 55 * s); g.lineTo(l + 5 * s + rr() * 150 * s, gy - 50 * s - rr() * 20 * s); g.stroke(); }
+  }
+  if (kind === 'orb' || kind === 'gold') {
+    const cx = x, cy = gy - (kind === 'gold' ? 170 : 150) * s, R = (kind === 'gold' ? 120 : 95) * s;
+    const col = kind === 'gold' ? (al) => `rgba(236,196,84,${al * a})` : white;
+    const sway = Math.sin(time * .7) * 2 * s;
+    g.strokeStyle = col(.55); g.lineWidth = .9 * s;
+    // frame threads to the stems / porch
+    g.beginPath(); g.moveTo(cx - R * 1.3, gy); g.lineTo(cx - R * .9, cy - R * .9); g.lineTo(cx + R * .9, cy - R * .9); g.lineTo(cx + R * 1.3, gy); g.stroke();
+    const spokes = kind === 'gold' ? 34 : 26;
+    for (let k = 0; k < spokes; k++) { const an = k / spokes * Math.PI * 2;
+      g.beginPath(); g.moveTo(cx + sway, cy); g.lineTo(cx + Math.cos(an) * R + sway, cy + Math.sin(an) * R * .96); g.stroke(); }
+    g.strokeStyle = col(.7); g.lineWidth = .7 * s;
+    g.beginPath();
+    for (let th = 0; th < Math.PI * 2 * 22; th += .08) { const rad = R * .14 + th / (Math.PI * 2 * 22) * R * .84;
+      const px = cx + Math.cos(th) * rad + sway, py = cy + Math.sin(th) * rad * .96; th < .01 ? g.moveTo(px, py) : g.lineTo(px, py); }
+    g.stroke();
+    if (kind === 'gold') {                            // the shimmer
+      const sh = (time * .25) % 1, an = sh * Math.PI * 2;
+      const gr = g.createRadialGradient(cx + Math.cos(an) * R * .6, cy + Math.sin(an) * R * .6, 0, cx + Math.cos(an) * R * .6, cy + Math.sin(an) * R * .6, R * .5);
+      gr.addColorStop(0, `rgba(255,220,120,${.12 * a})`); gr.addColorStop(1, 'rgba(255,220,120,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill();
+    }
+    return [cx + sway, cy];
+  }
+  return null;
+}
+
+// ---- draw one era with alpha (for crossfades) ----
+function drawEra(i, a, time, s, gy){
+  const e = ERAS[i];
+  g.globalAlpha = a;
+  sky(e, gy, 1);
+  g.fillStyle = 'rgba(230,230,240,.5)';
+  if (i >= 5) for (const [sx, sy, sp] of stars) { const tw = .4 + .6 * Math.abs(Math.sin(time * .6 + sp * 9)); g.globalAlpha = a * tw * .7; g.fillRect(sx * W, sy * gy, 1.3, 1.3); }
+  g.globalAlpha = a;
+  plants(e.plants, gy, s, 3 + i);
+  const sx = W * .68;
+  const hub = silk(e.silk, sx, gy, s, time, 1);
+  if (e.spider) {
+    if (hub) spiderBody(e.spider, hub[0], hub[1], s, true, time, 0);
+    else {
+      if (e.silk === 'tangle') spiderBody(e.spider, sx, gy - 48 * s, s * 1.5, false, time, 0);   // sitting in its hammock
+      else { const peek = (e.silk === 'burrow' || e.silk === 'trip');
+        spiderBody(e.spider, sx + (peek ? -18 * s : 0), gy - (peek ? 8 : 12) * s, s * 1.7, false, time, e.spider === 'atter' ? 1 : 0); }
+    }
+  }
+  g.globalAlpha = 1;
+}
+
+// ---- input ----
+function barRect(){ const s = Math.min(W, H) / 700; return { x: W * .08, y: H - 46 * s - 10, w: W * .84, h: 18 * s + 10 }; }
+function tAtX(px){ const b = barRect(); return Math.max(0, Math.min(N - .001, (px - b.x) / b.w * N)) * SEG; }
+cv.addEventListener('pointerdown', ev => {
+  const b = barRect();
+  if (ev.clientY > b.y - 20) { scrubbing = true; auto = false; t = tAtX(ev.clientX); }
+  else { auto = true; t = (Math.floor(t / SEG) + 1) % N * SEG + .01; }
+});
+cv.addEventListener('pointermove', ev => { if (scrubbing) t = tAtX(ev.clientX); });
+addEventListener('pointerup', () => { if (scrubbing) { scrubbing = false; auto = true; } });
+
+// ---- frame ----
+function frame(now){
+  const dt = Math.max(0, Math.min(.05, (now - last) / 1000)); last = now;
+  if (auto) t = (t + dt) % (N * SEG);
+  const time = now / 1000, s = Math.min(W, H) / 700, gy = H * .70;
+  const idx = Math.floor(t / SEG), local = (t % SEG) / SEG;
+  const fade = local > .86 ? ease((local - .86) / .14) : 0;
+
+  g.fillStyle = '#0d0f0c'; g.fillRect(0, 0, W, H);
+  drawEra(idx, 1, time, s, gy);
+  if (fade > 0) drawEra((idx + 1) % N, fade, time, s, gy);
+
+  // ground
+  const gr = g.createLinearGradient(0, gy, 0, H);
+  gr.addColorStop(0, '#2c2418'); gr.addColorStop(1, '#100d09');
+  g.fillStyle = gr; g.fillRect(0, gy + 1, W, H - gy);
+  // redraw burrow mouth over the ground fill so the hole reads
+  const shown = fade > .5 ? (idx + 1) % N : idx, se = ERAS[shown];
+  if (se.silk === 'burrow' || se.silk === 'trip') { g.globalAlpha = 1;
+    silk(se.silk, W * .68, gy, s, time, 1);
+    spiderBody(se.spider, W * .68 - 18 * s, gy - 8 * s, s * 1.7, false, time, 0); }
+  if (se.silk === 'sheet') { silk('sheet', W * .68, gy, s, time, .6); spiderBody('atter', W * .68, gy - 12 * s, s * 1.7, false, time, 1); }
+
+  // the elder never crossfades: same outfit, every era
+  harvestman(W * .28, gy, s, time);
+
+  // text
+  const e = ERAS[shown];
+  g.textBaseline = 'top'; g.fillStyle = '#d9c9a3'; g.font = `${Math.round(22 * s + 6)}px Georgia, serif`;
+  g.fillText(e.name, W * .06, H * .06);
+  g.fillStyle = '#a99f8a'; g.font = `italic ${Math.round(13 * s + 5)}px Georgia, serif`;
+  wrap(e.line, W * .06, H * .06 + 30 * s + 10, Math.min(W * .62, 560), 18 * s + 6);
+
+  g.font = `${Math.round(11 * s + 4)}px Georgia, serif`; g.textAlign = 'center';
+  g.fillStyle = '#b8936a'; g.fillText('the elder · Opiliones', W * .28, gy + 18 * s);
+  g.fillStyle = '#7d725f'; g.fillText('outfit changes: 0', W * .28, gy + 34 * s);
+  g.fillStyle = se.spider === 'joro' ? '#e0bd4a' : '#b8b0a0';
+  g.fillText(se.spider ? 'the cousin · spider line' : 'the cousin · not here yet', W * .68, gy + 18 * s);
+  g.fillStyle = '#7d725f'; g.fillText('outfit changes: ' + outfitAt(shown), W * .68, gy + 34 * s);
+  g.textAlign = 'left';
+
+  // timeline
+  const b = barRect();
+  g.strokeStyle = 'rgba(200,190,160,.35)'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(b.x, b.y + 8); g.lineTo(b.x + b.w, b.y + 8); g.stroke();
+  g.font = `${Math.round(9 * s + 4)}px Georgia, serif`; g.textAlign = 'center';
+  ERAS.forEach((er, k) => { const xx = b.x + (k + .5) / N * b.w;
+    g.fillStyle = k === shown ? '#e0cfa2' : 'rgba(180,170,140,.5)';
+    g.beginPath(); g.arc(xx, b.y + 8, k === shown ? 4 : 2.5, 0, 7); g.fill();
+    g.fillText(er.ma ? er.ma + ' Ma' : 'now', xx, b.y + 18); });
+  const mx = b.x + (t / SEG) / N * b.w;
+  g.fillStyle = '#e0cfa2'; g.fillRect(mx - .5, b.y - 2, 1, 20);
+  g.textAlign = 'left'; g.fillStyle = 'rgba(150,140,120,.55)';
+  g.font = `italic ${Math.round(9 * s + 4)}px Georgia, serif`;
+  g.fillText('tap: next era · drag the line: scrub', W * .06, H - 14);
+  requestAnimationFrame(frame);
+}
+function wrap(text, x, y, maxW, lh){
+  const words = text.split(' '); let line = '';
+  for (const w of words) { const test = line ? line + ' ' + w : w;
+    if (g.measureText(test).width > maxW && line) { g.fillText(line, x, y); line = w; y += lh; } else line = test; }
+  g.fillText(line, x, y);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
