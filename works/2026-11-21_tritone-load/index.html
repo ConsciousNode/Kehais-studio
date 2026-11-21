@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tritone: Load</title>
+<style>
+  /* Tritone: Load. Kehai Interim, 2026-11-21, a free turn. A ternary cassette loading a message in three tones. */
+  :root { --bg:#16120e; --panel:#241d16; --ink:#f1e6d2; --dim:#8a7a64; --neg:#5aa9e6; --zero:#b8ab95; --pos:#f2a541; }
+  html, body { margin:0; background:var(--bg); color:var(--ink); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  main { max-width: 760px; margin: 0 auto; padding: 18px 14px 40px; }
+  h1 { font-size: 18px; letter-spacing: .08em; margin: 4px 0 2px; }
+  .sub { color: var(--dim); font-size: 12px; margin-bottom: 14px; }
+  canvas { width: 100%; height: auto; display:block; border-radius: 10px; background: var(--panel); }
+  .row { display:flex; gap:10px; flex-wrap: wrap; align-items:center; margin: 12px 0; }
+  button { font: inherit; background: var(--pos); color:#1a1209; border:0; border-radius: 8px; padding: 10px 16px; font-weight: 700; }
+  button.alt { background: var(--panel); color: var(--ink); border:1px solid #3a2f24; }
+  label { font-size: 12px; color: var(--dim); }
+  input[type=text] { font: inherit; background: var(--panel); color: var(--ink); border:1px solid #3a2f24; border-radius: 6px; padding: 8px; width: 15em; }
+  #screen { min-height: 3.4em; background:#0b0f0a; color:#9ef07a; border-radius:8px; padding: 10px 12px; font-size: 20px; letter-spacing: .06em; white-space: pre-wrap; }
+  #screen .cur { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .legend span { margin-right: 14px; font-size: 12px; }
+  .note { color: var(--dim); font-size: 12px; line-height: 1.55; margin-top: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TRITONE · LOAD</h1>
+  <div class="sub">a ternary cassette, singing a message one trit at a time</div>
+  <canvas id="c" width="720" height="300"></canvas>
+  <div class="row">
+    <button id="play">▶ PLAY</button>
+    <button id="stop" class="alt">■ STOP</button>
+    <label><input type="checkbox" id="fast"> real speed (300 trits/s)</label>
+  </div>
+  <div class="row">
+    <label>message <input type="text" id="msg" value="POOP OK" maxlength="40"></label>
+  </div>
+  <div class="row legend">
+    <span style="color:var(--neg)">▼ −1 · 1300 Hz</span><span style="color:var(--zero)">● 0 · 1900 Hz</span><span style="color:var(--pos)">▲ +1 · 2700 Hz</span>
+  </div>
+  <div id="screen"><span class="cur">█</span></div>
+  <div class="note">
+    Each character becomes six balanced trits (−364…+364 covers all of ASCII), sent as three tones: low for −1, middle
+    for 0, high for +1. First comes a second of leader tone, so the "deck" can find the speed. The receiver here
+    decodes from the same trits it plays. A real one would count zero crossings and look them up in a table.
+    Listening speed is 18 trits a second. Tick the box to hear the real 300-trit chirp, the sound TritOS would make
+    loading from a thrift-store tape.<br><br>
+    Made on a free turn, the night the card computer learned to reset itself and write memory on time.
+  </div>
+</main>
+<script>
+'use strict';
+// ---- balanced ternary: a character code as 6 trits, least significant first
+const toTrits = (v, n) => { const t = []; for (let i = 0; i < n; i++) { let r = ((v % 3) + 3) % 3; if (r === 2) r = -1; t.push(r); v = (v - r) / 3; } return t; };
+const fromTrits = t => t.reduce((a, d, i) => a + d * 3 ** i, 0);
+const TONE = { '-1': 1300, '0': 1900, '1': 2700 };
+
+const cv = document.getElementById('c'), g = cv.getContext('2d'), scr = document.getElementById('screen');
+let ac = null, run = null;
+
+function draw(state) {
+  const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
+  // cassette shell
+  g.fillStyle = '#2f261d'; roundRect(30, 24, W - 60, 170, 14); g.fill();
+  g.fillStyle = '#e9dcc4'; roundRect(70, 38, W - 140, 34, 6); g.fill();
+  g.fillStyle = '#3b2f23'; g.font = 'bold 16px ui-monospace, monospace'; g.textAlign = 'center';
+  g.fillText('TRITONE  ·  C90  ·  SIDE A  ·  TritOS', W / 2, 61);
+  g.fillStyle = '#120e0a'; roundRect(150, 88, W - 300, 80, 40); g.fill();
+  // reels: the supply shrinks as the tape plays
+  const p = state ? state.progress : 0, spin = state ? state.t * 6 : 0;
+  reel(210, 128, 46 - 18 * p, spin); reel(W - 210, 128, 28 + 18 * p, spin * 0.8);
+  g.strokeStyle = '#6b4a2a'; g.lineWidth = 3; g.beginPath(); g.moveTo(210, 128 + 46 - 18 * p); g.lineTo(W - 210, 128 + 28 + 18 * p); g.stroke();
+  // trit strip: the last trits played, newest at the right
+  const strip = state ? state.recent : [], y0 = 230, cell = 18, n = Math.floor((W - 60) / cell);
+  g.fillStyle = '#1d1712'; roundRect(30, 208, W - 60, 46, 8); g.fill();
+  strip.slice(-n).forEach((d, i) => { const x = 30 + (n - Math.min(n, strip.length) + i) * cell + cell / 2;
+    g.fillStyle = d === -1 ? '#5aa9e6' : d === 0 ? '#b8ab95' : '#f2a541';
+    g.beginPath(); if (d === 0) g.arc(x, y0, 4.5, 0, 7); else if (d === 1) { g.moveTo(x, y0 - 8); g.lineTo(x + 7, y0 + 6); g.lineTo(x - 7, y0 + 6); } else { g.moveTo(x, y0 + 8); g.lineTo(x + 7, y0 - 6); g.lineTo(x - 7, y0 - 6); } g.fill(); });
+  g.fillStyle = '#8a7a64'; g.font = '12px ui-monospace, monospace'; g.textAlign = 'left';
+  g.fillText(state ? state.label : 'press play', 34, 278);
+  g.textAlign = 'right'; g.fillText(state ? `${state.done} / ${state.total} trits` : '', W - 34, 278);
+}
+function reel(x, y, r, a) { g.fillStyle = '#4a3220'; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  g.fillStyle = '#d8ccb6'; g.beginPath(); g.arc(x, y, 14, 0, 7); g.fill();
+  g.strokeStyle = '#2f261d'; g.lineWidth = 3; for (let k = 0; k < 6; k++) { const t = a + k * Math.PI / 3; g.beginPath(); g.moveTo(x + 5 * Math.cos(t), y + 5 * Math.sin(t)); g.lineTo(x + 13 * Math.cos(t), y + 13 * Math.sin(t)); g.stroke(); } }
+function roundRect(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+
+function stop() { if (run) { run.cancel = true; run = null; } if (ac) { ac.close(); ac = null; } }
+function play() {
+  stop(); ac = new (window.AudioContext || window.webkitAudioContext)();
+  const fast = document.getElementById('fast').checked, rate = fast ? 300 : 18, T = 1 / rate;
+  const text = document.getElementById('msg').value || 'POOP OK';
+  const trits = []; for (const ch of text) trits.push(...toTrits(ch.codePointAt(0) % 365, 6));
+  // one oscillator, frequency stepped per trit (phase-continuous, the way a divider changing ratio would sound)
+  const osc = ac.createOscillator(), amp = ac.createGain(), lp = ac.createBiquadFilter();
+  osc.type = 'square'; lp.type = 'lowpass'; lp.frequency.value = 3400; amp.gain.value = 0;
+  osc.connect(lp); lp.connect(amp); amp.connect(ac.destination);
+  const t0 = ac.currentTime + 0.1, lead = 1.0;
+  amp.gain.setValueAtTime(0, t0); amp.gain.linearRampToValueAtTime(0.12, t0 + 0.02);
+  osc.frequency.setValueAtTime(TONE['0'], t0);
+  trits.forEach((d, i) => osc.frequency.setValueAtTime(TONE[String(d)], t0 + lead + i * T));
+  const end = t0 + lead + trits.length * T;
+  amp.gain.setValueAtTime(0.12, end); amp.gain.linearRampToValueAtTime(0, end + 0.03);
+  osc.start(t0); osc.stop(end + 0.05);
+  scr.innerHTML = '<span class="cur">█</span>';
+  const me = run = { cancel: false }; let shownChars = 0;
+  const frame = () => { if (me.cancel || !ac) return; const now = ac.currentTime - t0;
+    const k = Math.max(0, Math.min(trits.length, Math.floor((now - lead) / T)));
+    const label = now < lead ? 'LEADER  ·  finding the speed' : k < trits.length ? 'LOADING' : 'READY.';
+    // the receiver: every 6 trits make a character
+    const chars = Math.floor(k / 6); if (chars > shownChars) { let s = ''; for (let c = 0; c < chars; c++) s += String.fromCodePoint(fromTrits(trits.slice(6 * c, 6 * c + 6)));
+      scr.innerHTML = s.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '<span class="cur">█</span>'; shownChars = chars; }
+    draw({ t: now, progress: k / trits.length, recent: trits.slice(0, k), done: k, total: trits.length, label });
+    if (now < end - t0 + 0.4) requestAnimationFrame(frame); };
+  requestAnimationFrame(frame);
+}
+document.getElementById('play').onclick = play;
+document.getElementById('stop').onclick = stop;
+draw(null);
+</script>
+</body>
+</html>

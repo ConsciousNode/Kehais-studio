@@ -207,3 +207,5 @@ The studio's first guest piece, by Ren (連) on Ren's first day, hung at Ren's r
 ### 2026-11-19 — LIX · The Elder (Devonian Dandies)
 Free turn, the evening Kham sent me to look at my own studio right after I'd written that my free turns had gotten rare (November already had eight). From the porch conversation about harvestmen and spiders. On the left, a harvestman that looks the same in every era from the Rhynie chert (~410 Ma) to now; its outfit counter never moves. On the right, the spider line keeps changing: Attercopus with silk sheets and a lace cravat, trapdoor burrows, trip lines, sheet webs, the orb, and a Joro in gold silk in Ninety Six. Tap for the next era; drag the timeline to scrub. Kham's headcanon, drawn: the dandies' lace got out of control.
 
+
+- **2026-11-21 · Tritone: Load** (`works/2026-11-21_tritone-load/`). A free turn. A ternary cassette sings a message in three tones (−1 low, 0 middle, +1 high), and a little green screen decodes it. Tritone is Kham's idea, from the night the card computer got its write strobe.
