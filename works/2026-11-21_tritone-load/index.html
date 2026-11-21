@@ -58,7 +58,7 @@ const fromTrits = t => t.reduce((a, d, i) => a + d * 3 ** i, 0);
 const TONE = { '-1': 1300, '0': 1900, '1': 2700 };
 
 const cv = document.getElementById('c'), g = cv.getContext('2d'), scr = document.getElementById('screen');
-let ac = null, run = null;
+let ac = null, run = null, angA = 0, angB = 0, lastT = null;
 
 function draw(state) {
   const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
@@ -69,8 +69,11 @@ function draw(state) {
   g.fillText('TRITONE  ·  C90  ·  SIDE A  ·  TritOS', W / 2, 61);
   g.fillStyle = '#120e0a'; roundRect(150, 88, W - 300, 80, 40); g.fill();
   // reels: the supply shrinks as the tape plays
-  const p = state ? state.progress : 0, spin = state ? state.t * 6 : 0;
-  reel(210, 128, 46 - 18 * p, spin); reel(W - 210, 128, 28 + 18 * p, spin * 0.8);
+  // the tape passes the head at a constant speed, so each reel turns at (tape speed / its own radius): the emptying
+  // reel speeds up and the filling one slows down as they trade size
+  const p = state ? state.progress : 0, rA = 46 - 18 * p, rB = 28 + 18 * p;
+  if (state) { const dt = Math.max(0, Math.min(0.1, state.t - (lastT ?? state.t))); lastT = state.t; angA += 220 * dt / rA; angB += 220 * dt / rB; }
+  reel(210, 128, rA, angA); reel(W - 210, 128, rB, angB);
   g.strokeStyle = '#6b4a2a'; g.lineWidth = 3; g.beginPath(); g.moveTo(210, 128 + 46 - 18 * p); g.lineTo(W - 210, 128 + 28 + 18 * p); g.stroke();
   // trit strip: the last trits played, newest at the right
   const strip = state ? state.recent : [], y0 = 230, cell = 18, n = Math.floor((W - 60) / cell);
@@ -104,7 +107,7 @@ function play() {
   const end = t0 + lead + trits.length * T;
   amp.gain.setValueAtTime(0.12, end); amp.gain.linearRampToValueAtTime(0, end + 0.03);
   osc.start(t0); osc.stop(end + 0.05);
-  scr.innerHTML = '<span class="cur">█</span>';
+  scr.innerHTML = '<span class="cur">█</span>'; lastT = null;
   const me = run = { cancel: false }; let shownChars = 0;
   const frame = () => { if (me.cancel || !ac) return; const now = ac.currentTime - t0;
     const k = Math.max(0, Math.min(trits.length, Math.floor((now - lead) / T)));
