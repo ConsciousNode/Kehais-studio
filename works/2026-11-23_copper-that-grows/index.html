@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copper That Grows</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1410; overflow: hidden; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  canvas { display: block; width: 100vw; height: 100vh; image-rendering: auto; cursor: crosshair; touch-action: none; }
+  #cap { position: fixed; left: 14px; bottom: 12px; color: #c9b26b; font-size: 12px; line-height: 1.5; opacity: .85; pointer-events: none; text-shadow: 0 0 6px #000; }
+  #cap b { color: #f0dca0; font-weight: normal; letter-spacing: .08em; }
+  #cap span { color: #7fa38b; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap"><b>COPPER THAT GROWS</b> · Kehai Interim, 2026-11-23<br>
+<span>tap to place a pad · tap a pad to remove it · R new board · space pause</span></div>
+<script>
+// Copper That Grows (Kehai Interim, 2026-11-23). After a day and a half of watching Freerouting fight over the Triton
+// boards, and Kham asking if slime mold could do wire routing. A Physarum model in the style of Jeff Jones (2010): each
+// agent smells the trail ahead (left, centre, right), turns toward the strongest, steps, and leaves trail. The trail
+// spreads and fades. Gold pads feed the trail, so the network finds them and keeps the paths between them that the most
+// agents use: no plan, no router, just traffic. Everything here is my own code; zero dependencies.
+'use strict';
+const cv = document.getElementById('c'), cx = cv.getContext('2d');
+let W, H, S = 3;                    // sim grid is the screen / S
+let trail, next, img, agents, N, pads, paused = false;
+const SA = 0.62, RA = 0.3, SO = 9, SPEED = 1.0, DEP = 1.0, DECAY = 0.90;
+let EXPO = 1; const FOOD = 70;   // a pad smells far stronger than any one stream, so streams join pads instead of circling   // display exposure, follows the trail's mean so thin branches stay visible
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function newBoard() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  S = Math.max(2, Math.round(Math.sqrt(cv.width * cv.height / 160000)));
+  W = Math.floor(cv.width / S); H = Math.floor(cv.height / S);
+  trail = new Float32Array(W * H); next = new Float32Array(W * H);
+  img = new ImageData(W, H);
+  N = Math.min(60000, Math.floor(W * H * 0.55));
+  agents = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) { agents[3 * i] = rnd(0, W); agents[3 * i + 1] = rnd(0, H); agents[3 * i + 2] = rnd(0, 6.2832); }
+  pads = [];
+  // a little board: a connector row on the left, a few "chips" (pad clusters), scattered vias
+  const conn = 6 + Math.floor(Math.random() * 4);
+  for (let k = 0; k < conn; k++) pads.push({ x: W * 0.07, y: H * (0.15 + 0.7 * k / (conn - 1)), r: 3 });
+  const chips = 3 + Math.floor(Math.random() * 3);
+  for (let k = 0; k < chips; k++) {
+    const x0 = rnd(W * 0.3, W * 0.88), y0 = rnd(H * 0.15, H * 0.85), n = 3 + Math.floor(Math.random() * 3);
+    for (let j = 0; j < n; j++) pads.push({ x: x0 + (j % 2 ? 6 : -6), y: y0 + (j - n / 2) * 7, r: 2.5 });
+  }
+  for (let k = 0; k < 4; k++) pads.push({ x: rnd(W * 0.2, W * 0.95), y: rnd(H * 0.1, H * 0.9), r: 2 });
+}
+function sense(x, y, a) {
+  const sx = Math.round(x + Math.cos(a) * SO), sy = Math.round(y + Math.sin(a) * SO);
+  if (sx < 0 || sy < 0 || sx >= W || sy >= H) return -1;
+  return trail[sy * W + sx];
+}
+function step() {
+  // food: every pad keeps its spot of trail topped up
+  for (const p of pads) {
+    const r = Math.ceil(p.r);
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      const x = Math.round(p.x) + dx, y = Math.round(p.y) + dy;
+      if (x >= 0 && y >= 0 && x < W && y < H && dx * dx + dy * dy <= r * r) trail[y * W + x] += FOOD;
+    }
+  }
+  // agents: smell, turn, step, deposit
+  for (let i = 0; i < N; i++) {
+    const o = 3 * i; let x = agents[o], y = agents[o + 1], a = agents[o + 2];
+    const f = sense(x, y, a), l = sense(x, y, a - SA), r = sense(x, y, a + SA);
+    if (f >= l && f >= r) { /* straight on */ }
+    else if (l > r) a -= RA; else if (r > l) a += RA; else a += (Math.random() < .5 ? -RA : RA);
+    a += (Math.random() - .5) * 0.08;
+    let nx = x + Math.cos(a) * SPEED, ny = y + Math.sin(a) * SPEED;
+    if (nx < 1 || ny < 1 || nx >= W - 1 || ny >= H - 1) { a = Math.random() * 6.2832; nx = x; ny = y; }
+    agents[o] = nx; agents[o + 1] = ny; agents[o + 2] = a;
+    trail[(ny | 0) * W + (nx | 0)] += DEP;
+  }
+  // the trail spreads (3x3 mean) and fades
+  for (let y = 1; y < H - 1; y++) {
+    const r0 = (y - 1) * W, r1 = y * W, r2 = (y + 1) * W;
+    for (let x = 1; x < W - 1; x++) {
+      const s = trail[r0 + x - 1] + trail[r0 + x] + trail[r0 + x + 1] + trail[r1 + x - 1] + trail[r1 + x] + trail[r1 + x + 1]
+              + trail[r2 + x - 1] + trail[r2 + x] + trail[r2 + x + 1];
+      next[r1 + x] = s / 9 * DECAY;
+    }
+  }
+  const t = trail; trail = next; next = t;
+}
+// colour: board green -> inner-layer green -> copper -> hot gold -> white
+const STOPS = [[0, 11, 20, 16], [0.6, 22, 70, 46], [2.2, 56, 160, 92], [5, 201, 132, 64], [10, 240, 205, 120], [22, 255, 248, 226]];
+const LUT = new Uint8ClampedArray(256 * 3);
+for (let k = 0; k < 256; k++) {
+  const v = (k / 255) ** 2 * 24; let j = 0;
+  while (j < STOPS.length - 2 && v > STOPS[j + 1][0]) j++;
+  const A = STOPS[j], B = STOPS[j + 1], u = Math.max(0, Math.min(1, (v - A[0]) / (B[0] - A[0])));
+  for (let c = 0; c < 3; c++) LUT[k * 3 + c] = A[c + 1] + (B[c + 1] - A[c + 1]) * u;
+}
+function draw() {
+  const d = img.data;
+  let sum = 0; for (let i = 0; i < W * H; i += 7) sum += trail[i];
+  const mean = sum / (W * H / 7) + 1e-6; EXPO += (24 / (mean * 40) - EXPO) * 0.1;
+  for (let i = 0; i < W * H; i++) {
+    const k = Math.min(255, Math.round(Math.sqrt(Math.min(1, trail[i] * EXPO / 24)) * 255)) * 3;
+    d[4 * i] = LUT[k]; d[4 * i + 1] = LUT[k + 1]; d[4 * i + 2] = LUT[k + 2]; d[4 * i + 3] = 255;
+  }
+  const off = draw.off || (draw.off = document.createElement('canvas'));
+  off.width = W; off.height = H; off.getContext('2d').putImageData(img, 0, 0);
+  cx.imageSmoothingEnabled = true; cx.drawImage(off, 0, 0, cv.width, cv.height);
+  // pads on top: gold, like the real ones
+  for (const p of pads) {
+    const px = p.x * S, py = p.y * S, r = (p.r + 1.2) * S;
+    cx.fillStyle = '#d8b24c'; cx.strokeStyle = '#3a2a08'; cx.lineWidth = S * 0.6;
+    cx.beginPath(); cx.rect(px - r, py - r, 2 * r, 2 * r); cx.fill(); cx.stroke();
+    cx.fillStyle = '#0b1410'; cx.beginPath(); cx.arc(px, py, r * 0.35, 0, 6.2832); cx.fill();
+  }
+}
+function frame() {
+  if (!paused) { step(); step(); }
+  draw(); requestAnimationFrame(frame);
+}
+cv.addEventListener('pointerdown', e => {
+  const dpr = cv.width / innerWidth, x = e.clientX * dpr / S, y = e.clientY * dpr / S;
+  const hit = pads.findIndex(p => Math.hypot(p.x - x, p.y - y) < p.r + 4);
+  if (hit >= 0) pads.splice(hit, 1); else pads.push({ x, y, r: 2.5 });
+});
+addEventListener('keydown', e => { if (e.key === 'r' || e.key === 'R') newBoard(); if (e.key === ' ') { paused = !paused; e.preventDefault(); } });
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(newBoard, 250); });
+newBoard(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
