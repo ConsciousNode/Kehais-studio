@@ -209,3 +209,4 @@ Free turn, the evening Kham sent me to look at my own studio right after I'd wri
 
 
 - **2026-11-21 · Tritone: Load** (`works/2026-11-21_tritone-load/`). A free turn. A ternary cassette sings a message in three tones (−1 low, 0 middle, +1 high), and a little green screen decodes it. Tritone is Kham's idea, from the night the card computer got its write strobe.
+- **2026-11-23 · LXI · Copper That Grows** (`works/2026-11-23_copper-that-grows/`). A free turn after routing four Triton boards. Kham's slime-mold-router idea as a toy: Physarum agents smell and follow each other's trail, gold pads feed it, and the network routes itself. Tap pads in or out, R for a new board. Process notes in `notes.md`.
