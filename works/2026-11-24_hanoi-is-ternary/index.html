@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hanoi Is Ternary</title>
+<style>
+  :root { --bg:#0e1013; --ink:#e9e4d8; --dim:#8b8f98; --gold:#f0c35a; --lines:#2a2f38; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  main { max-width: 1200px; margin: 0 auto; padding: 18px 16px 28px; }
+  h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: .12em; font-weight: normal; color: var(--gold); }
+  .sub { color: var(--dim); font-size: 13px; margin: 0 0 14px; line-height: 1.5; }
+  .panes { display: flex; flex-wrap: wrap; gap: 16px; }
+  .pane { flex: 1 1 420px; min-width: 0; background: #14171c; border: 1px solid var(--lines); border-radius: 10px; padding: 10px; }
+  canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; font-size: 13px; }
+  button { font: inherit; color: var(--ink); background: #1d2128; border: 1px solid #3a404b; border-radius: 6px; padding: 8px 12px; min-height: 40px; cursor: pointer; }
+  button:hover { border-color: var(--gold); }
+  label { color: var(--dim); display: flex; gap: 8px; align-items: center; }
+  input[type=range] { accent-color: var(--gold); }
+  .state { margin-top: 10px; font-size: 15px; line-height: 1.6; }
+  .state b { font-weight: normal; color: var(--dim); }
+  .d0 { color: #6fb8ff; } .d1 { color: #e9e4d8; } .d2 { color: #ff9e5a; }
+  .note { color: var(--dim); font-size: 12px; margin-top: 14px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<main>
+  <h1>HANOI IS TERNARY</h1>
+  <p class="sub">Kehai Interim · 2026-11-24 · for Kham, who solved an 8-disc tower as a kid in minutes and filled convention margins with Sierpiński triangles.<br>
+  Every arrangement of n discs on 3 pegs is an n-digit base-3 number: one digit per disc, saying which peg it sits on. Join every pair of arrangements one legal move apart and the whole puzzle is a Sierpiński triangle. Play on the left; watch where you are on the right.</p>
+  <div class="panes">
+    <div class="pane"><canvas id="pegs" width="900" height="560" aria-label="Tower of Hanoi pegs; tap a peg to pick up its top disc, tap another to drop it"></canvas></div>
+    <div class="pane"><canvas id="tri" width="900" height="800" aria-label="The Hanoi graph: every reachable arrangement as a point of a Sierpiński triangle"></canvas></div>
+  </div>
+  <div class="bar">
+    <button id="solve">Solve to the right peg</button>
+    <button id="pause">Pause</button>
+    <button id="reset">Reset</button>
+    <button id="wander">Wander</button>
+    <label>discs <input id="n" type="range" min="1" max="7" value="5"> <span id="nv">5</span></label>
+    <label>speed <input id="spd" type="range" min="1" max="10" value="5"></label>
+  </div>
+  <div class="state" id="state"></div>
+  <div class="note">Tap a peg to lift its top disc, tap another peg to drop it (a disc may never sit on a smaller one). "Solve" walks the shortest path from wherever you are to every disc on the right-hand peg: from the start that's 2ⁿ − 1 moves, straight along the triangle's bottom edge from corner to corner. "Wander" makes random legal moves and drifts around the fractal.<br>
+  The digits are written largest disc first, peg 0 = left (blue), 1 = middle, 2 = right (orange). The largest disc picks which third of the triangle you're in, the next one which third of that third, and so on down: the same rule Kham used to draw them by hand, a triforce inside every triforce.</div>
+</main>
+<script>
+// Hanoi Is Ternary (Kehai Interim, 2026-11-24). MIT, zero dependencies.
+// State: d[k] = peg of disc k (k = 0 smallest .. n-1 largest). Layout of the Hanoi graph: the largest disc chooses the
+// corner of the big triangle (through a peg->corner map), and inside that copy the two other pegs swap corners, so the
+// "all smaller discs on peg k" arrangement of copy i sits next to copy j: the classic Sierpinski embedding, recursive.
+'use strict';
+const P = document.getElementById('pegs'), px = P.getContext('2d');
+const T = document.getElementById('tri'), tx = T.getContext('2d');
+const PEGC = ['#6fb8ff', '#e9e4d8', '#ff9e5a'];
+let n = 5, d = [], held = -1, queue = [], paused = false, wandering = false, trail = [], anim = null, tick = 0;
+const CORN = [[0.08, 0.92], [0.5, 0.08], [0.92, 0.92]];   // triangle corners in 0..1 (left, top, right)
+function layout(state) {
+  // position = left corner + sum over discs, largest first, of (its corner - left corner) / 2^level, scaled by
+  // 1 / (1 - 2^-n) so that "every disc on one peg" lands exactly on that peg's corner
+  const perm = [0, 1, 2]; let ax = 0, ay = 0, scale = 1;
+  for (let k = state.length - 1; k >= 0; k--) {
+    const p = state[k], c = perm[p]; scale /= 2;
+    ax += (CORN[c][0] - CORN[0][0]) * scale; ay += (CORN[c][1] - CORN[0][1]) * scale;
+    const o = [0, 1, 2].filter(q => q !== p), t = perm[o[0]]; perm[o[0]] = perm[o[1]]; perm[o[1]] = t;   // swap the other two
+  }
+  const f = 1 / (1 - Math.pow(0.5, state.length));
+  return [CORN[0][0] + ax * f, CORN[0][1] + ay * f];
+}
+function key(s) { return s.join(''); }
+function legalMoves(s) {
+  const top = [99, 99, 99];
+  for (let k = s.length - 1; k >= 0; k--) top[s[k]] = k;   // smallest disc on each peg (smallest index wins)
+  const m = [];
+  for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) if (a !== b && top[a] < 99 && top[a] < top[b]) m.push([a, b]);
+  return m;
+}
+function apply(s, a, b) { const t = s.slice(); const top = Math.min(...t.map((p, k) => p === a ? k : 99)); t[top] = b; return t; }
+// all states and edges for the graph (3^n states; n <= 7 -> 2187)
+let nodes = [], edges = [];
+function buildGraph() {
+  nodes = []; edges = [];
+  const N = Math.pow(3, n), seen = new Map();
+  for (let i = 0; i < N; i++) {
+    const s = []; let v = i; for (let k = 0; k < n; k++) { s.push(v % 3); v = (v / 3) | 0; }
+    const [x, y] = layout(s); seen.set(key(s), nodes.length); nodes.push({ s, x, y });
+  }
+  for (let i = 0; i < nodes.length; i++) for (const [a, b] of legalMoves(nodes[i].s)) {
+    const j = seen.get(key(apply(nodes[i].s, a, b))); if (j > i) edges.push([i, j]);
+  }
+}
+// shortest path from any arrangement to "everything on peg g": for the largest disc down, if it is already on its
+// target, recurse; otherwise park everything smaller on the spare peg, move it, then target the smaller ones at g
+function solveMoves(s, g) {
+  s = s.slice(); const out = [];
+  function moveTower(k, target) {        // move discs 0..k (as currently placed) so that all sit on target
+    if (k < 0) return;
+    if (s[k] === target) { moveTower(k - 1, target); return; }
+    const spare = 3 - s[k] - target;
+    moveTower(k - 1, spare);
+    out.push([s[k], target]); s[k] = target;
+    moveTower(k - 1, target);
+  }
+  moveTower(s.length - 1, g); return out;
+}
+function reset() {
+  n = +document.getElementById('n').value; document.getElementById('nv').textContent = n;
+  d = new Array(n).fill(0); held = -1; queue = []; wandering = false; trail = [layout(d)]; anim = null;
+  buildGraph(); draw();
+}
+function doMove(a, b) {
+  const from = layout(d); d = apply(d, a, b); const to = layout(d);
+  anim = { from, to, t: 0 }; trail.push(to); if (trail.length > 4000) trail.shift();
+}
+function size(c) {
+  const r = c.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), w = Math.round(r.width * dpr);
+  const h = Math.round(w * (c === P ? 0.62 : 0.89)); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+}
+function drawPegs() {
+  size(P); const W = P.width, H = P.height; px.clearRect(0, 0, W, H);
+  const base = H * 0.86, pegH = H * 0.66, maxW = W * 0.29, minW = W * 0.07, dh = Math.min(H * 0.075, pegH / (n + 1));
+  for (let p = 0; p < 3; p++) {
+    const x = W * (0.18 + 0.32 * p);
+    px.fillStyle = held >= 0 && d[held] === p ? '#f0c35a' : '#3a404b';
+    px.fillRect(x - W * 0.006, base - pegH, W * 0.012, pegH);
+    px.fillStyle = PEGC[p]; px.globalAlpha = 0.9; px.fillRect(x - maxW / 2 - 6, base, maxW + 12, H * 0.02); px.globalAlpha = 1;
+    let h = 0;
+    for (let k = n - 1; k >= 0; k--) if (d[k] === p) {
+      const w = minW + (maxW - minW) * (n === 1 ? 1 : k / (n - 1));
+      const lift = k === held ? -H * 0.08 : 0;
+      const g = 0.55 + 0.45 * (k / Math.max(1, n - 1));
+      px.fillStyle = `hsl(${42 - k * 4}, ${70}%, ${30 + 40 * g}%)`;
+      const y = base - (h + 1) * dh + lift;
+      px.beginPath(); px.roundRect ? px.roundRect(x - w / 2, y, w, dh * 0.86, dh * 0.3) : px.rect(x - w / 2, y, w, dh * 0.86); px.fill();
+      h++;
+    }
+  }
+}
+function drawTri() {
+  size(T); const W = T.width, H = T.height; tx.clearRect(0, 0, W, H);
+  const X = v => v * W, Y = v => v * H;
+  tx.strokeStyle = 'rgba(160,170,190,0.22)'; tx.lineWidth = Math.max(1, W / 900);
+  tx.beginPath();
+  for (const [i, j] of edges) { tx.moveTo(X(nodes[i].x), Y(nodes[i].y)); tx.lineTo(X(nodes[j].x), Y(nodes[j].y)); }
+  tx.stroke();
+  const r = Math.max(1.2, W / (n <= 3 ? 90 : n <= 5 ? 180 : 420));
+  for (const nd of nodes) {
+    const c = PEGC[nd.s[n - 1]]; tx.fillStyle = c; tx.globalAlpha = 0.55;
+    tx.beginPath(); tx.arc(X(nd.x), Y(nd.y), r, 0, 6.2832); tx.fill();
+  }
+  tx.globalAlpha = 1;
+  // the walk so far
+  tx.strokeStyle = 'rgba(240,195,90,0.85)'; tx.lineWidth = Math.max(2, W / 300); tx.lineJoin = 'round';
+  tx.beginPath(); trail.forEach(([x, y], i) => i ? tx.lineTo(X(x), Y(y)) : tx.moveTo(X(x), Y(y))); tx.stroke();
+  let cx = trail[trail.length - 1];
+  if (anim) { const u = Math.min(1, anim.t); cx = [anim.from[0] + (anim.to[0] - anim.from[0]) * u, anim.from[1] + (anim.to[1] - anim.from[1]) * u]; }
+  tx.fillStyle = '#fff6dc'; tx.shadowColor = '#f0c35a'; tx.shadowBlur = W / 40;
+  tx.beginPath(); tx.arc(X(cx[0]), Y(cx[1]), Math.max(5, W / 110), 0, 6.2832); tx.fill(); tx.shadowBlur = 0;
+}
+function drawState() {
+  const digits = d.slice().reverse().map(p => `<span class="d${p}">${p}</span>`).join('');
+  const bal = d.slice().reverse().map(p => `<span class="d${p}">${['−', '0', '+'][p]}</span>`).join('');
+  document.getElementById('state').innerHTML =
+    `<b>position (base 3, largest disc first):</b> ${digits} &nbsp; <b>as balanced trits:</b> ${bal} &nbsp; <b>moves walked:</b> ${trail.length - 1}`;
+}
+function draw() { drawPegs(); drawTri(); drawState(); }
+function frame() {
+  const spd = +document.getElementById('spd').value;
+  if (anim) { anim.t += 0.04 * spd; if (anim.t >= 1) anim = null; }
+  else if (!paused) {
+    tick++;
+    if (queue.length && tick % Math.max(1, 12 - spd) === 0) { const [a, b] = queue.shift(); doMove(a, b); }
+    else if (wandering && !queue.length && tick % Math.max(1, 12 - spd) === 0) {
+      const m = legalMoves(d); const [a, b] = m[(Math.random() * m.length) | 0]; doMove(a, b);
+    }
+  }
+  draw(); requestAnimationFrame(frame);
+}
+P.addEventListener('pointerdown', e => {
+  const r = P.getBoundingClientRect(), x = (e.clientX - r.left) / r.width;
+  const peg = x < 0.34 ? 0 : x < 0.66 ? 1 : 2;
+  queue = []; wandering = false;
+  if (held < 0) { const k = d.indexOf(peg); if (k >= 0) held = Math.min(...d.map((p, i) => p === peg ? i : 99)); }
+  else {
+    const src = d[held];
+    if (peg !== src && legalMoves(d).some(([a, b]) => a === src && b === peg)) doMove(src, peg);
+    held = -1;
+  }
+});
+document.getElementById('solve').onclick = () => { held = -1; wandering = false; queue = solveMoves(d, 2); paused = false; document.getElementById('pause').textContent = 'Pause'; };
+document.getElementById('pause').onclick = e => { paused = !paused; e.target.textContent = paused ? 'Resume' : 'Pause'; };
+document.getElementById('reset').onclick = reset;
+document.getElementById('wander').onclick = () => { held = -1; queue = []; wandering = !wandering; paused = false; };
+document.getElementById('n').oninput = reset;
+reset(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
