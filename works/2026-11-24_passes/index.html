@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passes · Kehai's Studio</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #04120c; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: manipulation; }
+  #hud { position: fixed; left: 0; right: 0; bottom: 0; padding: 8px 14px 10px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace;
+         color: #cfe8d8; background: linear-gradient(to top, rgba(2,10,6,.92), rgba(2,10,6,0)); pointer-events: none; }
+  #title { position: fixed; left: 14px; top: 10px; font: 600 15px/1.3 Georgia, serif; color: #e8d9a8; letter-spacing: .04em; pointer-events: none; }
+  #title small { display: block; font: 12px ui-monospace, Menlo, monospace; color: #7fa892; letter-spacing: 0; }
+  .bad { color: #ff7a6b; } .ok { color: #9be7b1; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">Passes<small>tap: new board · space: pause · F: faster</small></div>
+<div id="hud"></div>
+<script>
+// Passes. Kehai Interim, 2026-11-24.
+// A real router, small: negotiated congestion (the PathFinder idea, McMurchie & Ebeling 1995) on a two-layer grid.
+// Pass 1: every net takes its cheapest path and nets may share cells (the red ones). After each pass, every shared
+// cell remembers it was fought over and gets dearer; sharing also costs more each pass. Nets re-route, argue,
+// and settle until no cell holds two nets. Nothing here is faked: the picture is the router's state.
+'use strict';
+const cv = document.getElementById('c'), cx = cv.getContext('2d'), hud = document.getElementById('hud');
+let W, H, CS, OX, OY, NC;            // grid size, cell px, offset
+const L = 2;                          // layers: 0 top (copper), 1 bottom (green)
+let rnd;
+function seeded(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+let owner;      // per cell: -1 free, -2 blocked, k = pin of net k (both layers)
+let occ, hist;  // per node (cell*2+layer): nets using it this pass; congestion history
+let nets, pins, routes, pass, netIdx, presFac, paused = false, fast = false, doneT = 0, chips;
+let flash = [];  // recently routed paths [{path, t}]
+
+function idx(x, y) { return y * W + x; }
+
+function newBoard() {
+  rnd = seeded((Math.random() * 1e9) | 0);
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  CS = Math.max(7, Math.min(13, Math.floor(Math.min(innerWidth / 64, (innerHeight - 70) / 40))));
+  W = Math.floor((innerWidth - 20) / CS); H = Math.floor((innerHeight - 90) / CS);
+  OX = (innerWidth - W * CS) / 2; OY = 44 + ((innerHeight - 90) - H * CS) / 2;
+  NC = W * H;
+  owner = new Int32Array(NC).fill(-1);
+  occ = new Uint8Array(NC * L); hist = new Float32Array(NC * L);
+  // chips: two rows of pins at pitch 2, so exactly one track fits between neighbouring pins
+  chips = []; pins = [];
+  const want = Math.max(6, Math.floor(NC / 150));
+  for (let tries = 0; chips.length < want && tries < 2000; tries++) {
+    const n = 4 + 2 * Math.floor(rnd() * 5);           // pins per row: 4..12
+    const vert = rnd() < .5, len = 2 * n - 1, gap = 3 + Math.floor(rnd() * 2);
+    const w = vert ? gap + 1 : len, h = vert ? len : gap + 1;
+    const x0 = 3 + Math.floor(rnd() * (W - w - 6)), y0 = 3 + Math.floor(rnd() * (H - h - 6));
+    if (chips.some(c => x0 < c.x + c.w + 3 && c.x < x0 + w + 3 && y0 < c.y + c.h + 3 && c.y < y0 + h + 3)) continue;
+    const c = { x: x0, y: y0, w, h, pins: [] };
+    for (let i = 0; i < n; i++) for (const side of [0, 1]) {
+      const px = vert ? x0 + side * gap : x0 + 2 * i, py = vert ? y0 + 2 * i : y0 + side * gap;
+      const p = { x: px, y: py, chip: chips.length, net: -1 }; c.pins.push(p); pins.push(p); owner[idx(px, py)] = -2;
+    }
+    chips.push(c);
+  }
+  // nets: 2-3 pins on different chips, nearer chips likelier; about 70% of pins used
+  nets = [];
+  const free = pins.slice();
+  for (let i = free.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [free[i], free[j]] = [free[j], free[i]]; }
+  while (free.length > 1 && nets.length < pins.length * 0.4) {
+    const a = free.pop(); const k = 1 + (rnd() < .25 ? 1 : 0); const net = [a];
+    for (let m = 0; m < k; m++) {
+      let best = -1, bd = 1e9;
+      for (let j = 0; j < free.length; j++) {
+        const p = free[j]; if (net.some(q => q.chip === p.chip)) continue;
+        const d = Math.abs(p.x - a.x) + Math.abs(p.y - a.y) + rnd() * 30; if (d < bd) { bd = d; best = j; }
+      }
+      if (best < 0) break; net.push(free.splice(best, 1)[0]);
+    }
+    if (net.length < 2) continue;
+    const k2 = nets.length; for (const p of net) { p.net = k2; owner[idx(p.x, p.y)] = k2; }
+    nets.push(net);
+  }
+  routes = nets.map(() => null);
+  pass = 1; netIdx = 0; presFac = 0.5; doneT = 0; flash = [];
+}
+
+// cost of entering node n (cell*2+layer) for net k
+function nodeCost(n, k) {
+  const c = n >> 1, o = owner[c];
+  if (o === -2 || (o >= 0 && o !== k)) return Infinity;      // another net's pin, or an unused pin
+  if (o === k) return 0.2;
+  return (1 + hist[n]) * (1 + presFac * occ[n]);
+}
+
+// a heap of [cost, node]
+class Heap { constructor() { this.a = []; }
+  push(c, n) { const a = this.a; a.push([c, n]); let i = a.length - 1; while (i) { const p = (i - 1) >> 1; if (a[p][0] <= a[i][0]) break; [a[p], a[i]] = [a[i], a[p]]; i = p; } }
+  pop() { const a = this.a, top = a[0], last = a.pop(); if (a.length) { a[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < a.length && a[l][0] < a[m][0]) m = l; if (r < a.length && a[r][0] < a[m][0]) m = r; if (m === i) break; [a[m], a[i]] = [a[i], a[m]]; i = m; } } return top; }
+  get size() { return this.a.length; } }
+
+const dist = { d: null, from: null }; let closed;
+function routeNet(k) {
+  const net = nets[k]; const tree = new Set();
+  for (const l of [0, 1]) tree.add(idx(net[0].x, net[0].y) * 2 + l);
+  const path = [];   // segments [n1, n2]
+  if (!dist.d || dist.d.length !== NC * L) { dist.d = new Float32Array(NC * L); dist.from = new Int32Array(NC * L); closed = new Uint8Array(NC * L); }
+  for (let t = 1; t < net.length; t++) {
+    const d = dist.d, from = dist.from; d.fill(Infinity); from.fill(-1);
+    const hp = new Heap(); closed.fill(0);
+    for (const n of tree) { d[n] = 0; hp.push(0, n); }
+    const g0 = idx(net[t].x, net[t].y) * 2, tx = net[t].x, ty = net[t].y; let hit = -1;
+    while (hp.size) {
+      const n = hp.pop()[1]; if (closed[n]) continue; closed[n] = 1; const c = d[n];
+      if ((n >> 1) === (g0 >> 1)) { hit = n; break; }
+      const cell = n >> 1, l = n & 1, x = cell % W, y = (cell / W) | 0;
+      const nb = [];
+      if (x > 0) nb.push(n - 2); if (x < W - 1) nb.push(n + 2); if (y > 0) nb.push(n - 2 * W); if (y < H - 1) nb.push(n + 2 * W);
+      for (const m of nb) { const cc = nodeCost(m, k); if (cc === Infinity) continue;
+        const nd = c + cc; if (nd < d[m]) { d[m] = nd; from[m] = n; const mc = m >> 1; hp.push(nd + 0.9 * (Math.abs(mc % W - tx) + Math.abs(((mc / W) | 0) - ty)), m); } }
+      const v = n ^ 1, vc = owner[cell] === k ? 0.2 : 3 * (1 + hist[v]) * (1 + presFac * occ[v]);   // a via
+      if (owner[cell] !== -2 && (owner[cell] < 0 || owner[cell] === k)) { const nd = c + vc; if (nd < d[v]) { d[v] = nd; from[v] = n; hp.push(nd + 0.9 * (Math.abs(cell % W - tx) + Math.abs(((cell / W) | 0) - ty)), v); } }
+    }
+    if (hit < 0) return null;
+    for (let n = hit; from[n] >= 0 && !tree.has(n); n = from[n]) { path.push([from[n], n]); tree.add(n); }
+    tree.add(hit); tree.add(hit ^ 1);
+  }
+  const nodes = new Set(); for (const [a, b] of path) { nodes.add(a); nodes.add(b); }
+  return { segs: path, nodes };
+}
+
+function ripUp(k) { const r = routes[k]; if (!r) return; for (const n of r.nodes) if (owner[n >> 1] !== k) occ[n]--; routes[k] = null; }
+function place(k, r) { routes[k] = r; if (!r) return; for (const n of r.nodes) if (owner[n >> 1] !== k) occ[n]++; }
+
+function stats() {
+  let over = 0, vias = 0, fail = 0;
+  for (let n = 0; n < NC * L; n++) if (occ[n] > 1) over++;
+  routes.forEach(r => { if (!r) { fail++; return; } for (const [a, b] of r.segs) if ((a ^ 1) === b) vias++; });
+  return { over, vias, fail };
+}
+
+function step() {
+  if (doneT) { if (performance.now() - doneT > 6000) newBoard(); return; }
+  const k = netIdx;
+  ripUp(k); const r = routeNet(k); place(k, r); if (r) flash.push({ k, t: performance.now() });
+  netIdx++;
+  if (netIdx >= nets.length) {
+    const s = stats();
+    if (s.over === 0 && s.fail === 0) { doneT = performance.now(); return; }
+    for (let n = 0; n < NC * L; n++) if (occ[n] > 1) hist[n] += 0.4 * (occ[n] - 1);
+    presFac *= 1.6; pass++; netIdx = 0;
+    if (pass > 60) { doneT = performance.now(); }
+  }
+}
+
+function cellXY(c) { return [OX + (c % W) * CS + CS / 2, OY + ((c / W) | 0) * CS + CS / 2]; }
+
+function draw() {
+  const now = performance.now();
+  cx.fillStyle = '#04120c'; cx.fillRect(0, 0, innerWidth, innerHeight);
+  // board
+  cx.fillStyle = '#0a2a1b'; cx.fillRect(OX - 4, OY - 4, W * CS + 8, H * CS + 8);
+  cx.strokeStyle = 'rgba(232,217,168,.25)'; cx.lineWidth = 1; cx.strokeRect(OX - 4.5, OY - 4.5, W * CS + 9, H * CS + 9);
+  // chip bodies
+  for (const c of chips) {
+    cx.fillStyle = 'rgba(0,0,0,.35)';
+    cx.fillRect(OX + c.x * CS + CS * .9, OY + c.y * CS + CS * .9, (c.w - 1) * CS - CS * .8, (c.h - 1) * CS - CS * .8);
+  }
+  const tw = Math.max(1.5, CS * .32);
+  // bottom layer first, then top
+  for (const layer of [1, 0]) {
+    cx.lineCap = 'round'; cx.lineWidth = tw;
+    routes.forEach((r, k) => { if (!r) return;
+      const f = flash.find(q => q.k === k), glow = f ? Math.max(0, 1 - (now - f.t) / 900) : 0;
+      cx.strokeStyle = layer ? `rgba(${70 + 120 * glow},${190 + 60 * glow},${150 + 80 * glow},${.55 + .45 * glow})` : `rgba(${214 + 41 * glow},${160 + 90 * glow},${70 + 150 * glow},.95)`;
+      cx.beginPath();
+      for (const [a, b] of r.segs) { if ((a & 1) !== layer || (b & 1) !== layer) continue;
+        const [x1, y1] = cellXY(a >> 1), [x2, y2] = cellXY(b >> 1); cx.moveTo(x1, y1); cx.lineTo(x2, y2); }
+      cx.stroke();
+    });
+  }
+  // conflicts: cells two nets are fighting over
+  const blink = .55 + .45 * Math.sin(now / 160);
+  cx.fillStyle = `rgba(255,90,70,${.75 * blink})`;
+  for (let n = 0; n < NC * L; n++) if (occ[n] > 1) { const [x, y] = cellXY(n >> 1); cx.beginPath(); cx.arc(x, y, CS * .42, 0, 7); cx.fill(); }
+  // vias
+  cx.lineWidth = Math.max(1, CS * .16); cx.strokeStyle = '#e8d9a8';
+  routes.forEach((r, k) => { if (!r) return; for (const [a, b] of r.segs) if ((a ^ 1) === b && owner[a >> 1] !== k) { const [x, y] = cellXY(a >> 1); cx.beginPath(); cx.arc(x, y, CS * .3, 0, 7); cx.stroke(); } });
+  // pins
+  for (const p of pins) { const [x, y] = cellXY(idx(p.x, p.y)); const used = p.net >= 0;
+    cx.fillStyle = used ? (routes[p.net] ? '#f0c060' : '#c08840') : 'rgba(192,160,96,.35)';
+    cx.fillRect(x - CS * .4, y - CS * .4, CS * .8, CS * .8);
+    if (used) { cx.fillStyle = '#0a2a1b'; cx.beginPath(); cx.arc(x, y, CS * .16, 0, 7); cx.fill(); } }
+  flash = flash.filter(f => now - f.t < 900);
+  const s = stats();
+  if (doneT) hud.innerHTML = `pass #${pass} · <span class="${s.over || s.fail ? 'bad' : 'ok'}">${s.over || s.fail ? `gave up: ${s.over} shared cells, ${s.fail} unrouted` : `routed. ${nets.length} nets, 0 shared cells, ${s.vias} vias`}</span> · new board soon`;
+  else hud.innerHTML = `pass #${pass} · net ${netIdx + 1}/${nets.length} · <span class="${s.over ? 'bad' : 'ok'}">${s.over} shared cells</span> · ${s.vias} vias${s.fail ? ` · ${s.fail} unrouted` : ''} · sharing costs ×${presFac.toFixed(1)}${paused ? ' · paused' : ''}`;
+}
+
+let acc = 0, last = performance.now();
+function frame(t) {
+  const dt = t - last; last = t;
+  if (!paused) { acc += dt; const every = fast ? 4 : 45; let n = 0; while (acc > every && n < 40) { step(); acc -= every; n++; } if (acc > 1000) acc = 0; }
+  draw(); requestAnimationFrame(frame);
+}
+addEventListener('pointerdown', () => newBoard());
+addEventListener('keydown', e => { if (e.key === ' ') { paused = !paused; e.preventDefault(); } else if (e.key === 'f' || e.key === 'F') fast = !fast; else if (e.key === 'r' || e.key === 'R') newBoard(); });
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(newBoard, 250); });
+newBoard(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
